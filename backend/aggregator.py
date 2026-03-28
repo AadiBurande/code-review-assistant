@@ -4,7 +4,7 @@ import uuid
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -19,11 +19,16 @@ SEVERITY_SCORE = {"Critical": 0, "High": 20, "Medium": 50, "Low": 80, "Info": 10
 
 WEIGHTS = {"bug": 0.40, "security": 0.30, "performance": 0.15, "style": 0.15}
 
+# ── Penalty Map (tightened for production accuracy) ───────────────────────────
+
+PENALTY = {"Critical": 30, "High": 20, "Medium": 10, "Low": 4, "Info": 1}
+
 # ── Pydantic Report Models ────────────────────────────────────────────────────
 
 class Remediation(BaseModel):
     text: str
     code_snippet: str = ""
+
 
 class ReportFinding(BaseModel):
     id: str
@@ -39,12 +44,14 @@ class ReportFinding(BaseModel):
     tags: List[str] = []
     internal_reasoning: str = ""
 
+
 class FileReport(BaseModel):
     file_path: str
     language: str
     score: float
     total_findings: int
     findings: List[ReportFinding]
+
 
 class ReportMetadata(BaseModel):
     project_name: str
@@ -53,7 +60,9 @@ class ReportMetadata(BaseModel):
     total_findings: int
     language_summary: Dict[str, int]
     score: float
-    verdict: str   # Accept / Needs Changes / Reject
+    verdict: str          # accept / needs_changes / reject
+    sub_scores: Dict[str, float] = {}   # ✅ per-category scores computed on deduped findings
+
 
 class FullReport(BaseModel):
     metadata: ReportMetadata
@@ -63,25 +72,21 @@ class FullReport(BaseModel):
 # ── Deduplication ─────────────────────────────────────────────────────────────
 
 def _fingerprint(finding: Dict) -> str:
-    """Deterministic fingerprint to identify duplicate findings."""
     sig = (
         finding.get("file_path", "") +
         str(finding.get("start_line", 0)) +
         str(finding.get("end_line", 0)) +
         finding.get("issue_type", "") +
-        # Normalize description: lowercase, strip punctuation, first 60 chars
-        "".join(c for c in finding.get("description", "").lower() if c.isalnum() or c == " ")[:60]
+        "".join(
+            c for c in finding.get("description", "").lower()
+            if c.isalnum() or c == " "
+        )[:60]
     )
     return hashlib.md5(sig.encode()).hexdigest()
 
 
 def deduplicate(findings: List[Dict]) -> List[Dict]:
-    """
-    Merge findings with the same fingerprint.
-    Keeps the highest severity and highest confidence among duplicates.
-    """
     seen: Dict[str, Dict] = {}
-
     for f in findings:
         fp = _fingerprint(f)
         if fp not in seen:
@@ -90,17 +95,12 @@ def deduplicate(findings: List[Dict]) -> List[Dict]:
         else:
             existing = seen[fp]
             existing["_count"] += 1
-            # Escalate to higher severity
             if SEVERITY_ORDER.get(f["severity"], 4) < SEVERITY_ORDER.get(existing["severity"], 4):
                 existing["severity"] = f["severity"]
-            # Keep highest confidence
             if f.get("confidence", 0) > existing.get("confidence", 0):
                 existing["confidence"] = f["confidence"]
-            # Merge tags
-            existing["tags"] = list(set(existing.get("tags", []) + f.get("tags", [])))
-            # Merge references
+            existing["tags"]       = list(set(existing.get("tags", [])       + f.get("tags", [])))
             existing["references"] = list(set(existing.get("references", []) + f.get("references", [])))
-
     return list(seen.values())
 
 
@@ -108,15 +108,9 @@ def deduplicate(findings: List[Dict]) -> List[Dict]:
 
 def _score_findings(findings: List[Dict]) -> float:
     """
-    Compute a 0–100 quality score for a set of findings.
-    Score = weighted average of per-category scores.
-    Each category score starts at 100 and is penalized per finding.
-
-    Penalty per finding:
-      Critical → -25, High → -15, Medium → -8, Low → -3, Info → -1
+    Compute 0–100 quality score using tightened penalties.
+    Critical → -30, High → -20, Medium → -10, Low → -4, Info → -1
     """
-    PENALTY = {"Critical": 25, "High": 15, "Medium": 8, "Low": 3, "Info": 1}
-
     category_scores = {cat: 100.0 for cat in WEIGHTS}
 
     for f in findings:
@@ -133,13 +127,28 @@ def _score_findings(findings: List[Dict]) -> float:
     return round(final_score, 1)
 
 
+def _compute_sub_scores(findings: List[Dict]) -> Dict[str, float]:
+    """Compute per-category sub-scores from deduplicated findings."""
+    cat_scores = {cat: 100.0 for cat in WEIGHTS}
+    for f in findings:
+        cat = f.get("issue_type", "bug")
+        if cat not in cat_scores:
+            cat = "bug"
+        cat_scores[cat] = max(0.0, cat_scores[cat] - PENALTY.get(f.get("severity", "Info"), 1))
+    return {k: round(v, 1) for k, v in cat_scores.items()}
+
+
 def _verdict(score: float) -> str:
-    if score >= 75:
-        return "Accept"
-    elif score >= 50:
-        return "Needs Changes"
+    """
+    Tightened thresholds for production-grade accuracy.
+    Accept only genuinely clean code.
+    """
+    if score >= 85:
+        return "accept"
+    elif score >= 60:
+        return "needs_changes"
     else:
-        return "Reject"
+        return "reject"
 
 
 # ── Report Builder ────────────────────────────────────────────────────────────
@@ -148,12 +157,8 @@ def build_report(
     pipeline_state: Dict,
     language: str = "python",
 ) -> FullReport:
-    """
-    Takes final pipeline state, deduplicates findings,
-    scores them, and builds a structured FullReport.
-    """
     raw_findings: List[Dict] = pipeline_state.get("all_findings", [])
-    project_name: str = pipeline_state.get("project_name", "unnamed_project")
+    project_name: str        = pipeline_state.get("project_name", "unnamed_project")
 
     # Deduplicate
     deduped = deduplicate(raw_findings)
@@ -200,7 +205,6 @@ def build_report(
                 references=f.get("references", []),
                 tags=f.get("tags", []),
                 internal_reasoning=f.get("internal_reasoning") or "",
-
             ))
 
         file_reports.append(FileReport(
@@ -211,9 +215,10 @@ def build_report(
             findings=report_findings,
         ))
 
-    # Overall project score
+    # ── Compute scores from deduplicated findings (single source of truth) ──
     overall_score = _score_findings(deduped)
-    verdict = _verdict(overall_score)
+    sub_scores    = _compute_sub_scores(deduped)   # ✅ uses same deduped set
+    verdict       = _verdict(overall_score)
 
     metadata = ReportMetadata(
         project_name=project_name,
@@ -223,6 +228,7 @@ def build_report(
         language_summary=language_summary,
         score=overall_score,
         verdict=verdict,
+        sub_scores=sub_scores,    # ✅ attached to metadata, used by main.py
     )
 
     return FullReport(metadata=metadata, files=file_reports)
@@ -246,23 +252,31 @@ def save_markdown_report(report: FullReport, output_path: str) -> str:
 
     lines.append(f"# Code Review Report — {m.project_name}")
     lines.append(f"\n**Analyzed at:** {m.analyzed_at}")
-    lines.append(f"**Overall Score:** `{m.score}/100` — **{m.verdict}**")
+    lines.append(f"**Overall Score:** `{m.score}/100` — **{m.verdict.upper()}**")
     lines.append(f"**Total Findings:** {m.total_findings} across {m.total_files} file(s)\n")
 
-    # Score legend
+    # Sub-scores table
+    if m.sub_scores:
+        lines.append("## Category Scores")
+        lines.append("| Category | Score |")
+        lines.append("|---|---|")
+        for cat, score in m.sub_scores.items():
+            lines.append(f"| {cat.capitalize()} | `{score}/100` |")
+        lines.append("")
+
+    # Score legend — updated thresholds
     lines.append("## Score Guide")
     lines.append("| Verdict | Score Range |")
     lines.append("|---|---|")
-    lines.append("| ✅ Accept | 75–100 |")
-    lines.append("| ⚠️ Needs Changes | 50–74 |")
-    lines.append("| ❌ Reject | 0–49 |\n")
+    lines.append("| ✅ Accept         | 85–100 |")
+    lines.append("| ⚠️ Needs Changes  | 60–84  |")
+    lines.append("| ❌ Reject         | 0–59   |\n")
 
     for file_report in report.files:
         lines.append(f"---\n## 📄 `{file_report.file_path}`")
         lines.append(f"**File Score:** `{file_report.score}/100` | "
                      f"**Findings:** {file_report.total_findings}\n")
 
-        # Group by severity
         for sev in ["Critical", "High", "Medium", "Low", "Info"]:
             sev_findings = [f for f in file_report.findings if f.severity == sev]
             if not sev_findings:
@@ -311,14 +325,13 @@ if __name__ == "__main__":
 
     report = build_report(state, language="python")
 
-    # Print summary
     print(f"\n{'='*60}")
-    print(f"  PROJECT SCORE : {report.metadata.score}/100")
-    print(f"  VERDICT       : {report.metadata.verdict}")
+    print(f"  PROJECT SCORE  : {report.metadata.score}/100")
+    print(f"  VERDICT        : {report.metadata.verdict}")
     print(f"  UNIQUE FINDINGS: {report.metadata.total_findings}")
+    print(f"  SUB-SCORES     : {report.metadata.sub_scores}")
     print(f"{'='*60}")
 
-    # Save outputs
     save_json_report(report,     "reports/test_project_report.json")
     save_markdown_report(report, "reports/test_project_report.md")
 

@@ -1,0 +1,288 @@
+================================================================
+  AI CODE REVIEW ASSISTANT — COMMAND REFERENCE
+  Project: code-review-assistant
+  Stack  : FastAPI + LangGraph + Next.js
+================================================================
+
+
+----------------------------------------------------------------
+  PROJECT STRUCTURE
+----------------------------------------------------------------
+code-review-assistant/
+├── backend/
+│   ├── main.py
+│   ├── langgraph_pipeline.py
+│   ├── aggregator.py
+│   ├── prompts.py
+│   ├── agents.py
+│   ├── analyzers.py
+│   ├── loader.py
+│   ├── context_builder.py
+│   ├── validators.py
+│   ├── pdf_generator.py
+│   ├── pyproject.toml
+│   ├── reports/
+│   ├── temp_uploads/
+│   └── tests/
+│       ├── test_context_builder.py
+│       ├── test_validators.py
+│       ├── test_pipeline_accuracy.py
+│       ├── test_pdf_generation.py
+│       └── run_all_tests.py
+└── frontend/
+    ├── package.json
+    └── ...
+
+
+----------------------------------------------------------------
+  ONE-TIME SETUP
+----------------------------------------------------------------
+
+# 1. Clone the repository
+git clone <your-repo-url>
+cd code-review-assistant
+
+# 2. Install Poetry (if not already installed)
+pip install poetry
+
+# 3. Setup backend
+cd backend
+poetry install
+
+# 4. Install PDF generation dependency
+poetry add reportlab
+
+# 5. Install static analysis tools
+poetry add bandit semgrep
+
+# 6. Setup frontend
+cd ../frontend
+npm install
+
+# 7. Create .env file in backend/
+cd ../backend
+copy .env.example .env       # Windows
+cp .env.example .env         # Linux/Mac
+
+# 8. Add your API keys to .env
+# GOOGLE_API_KEY=your_gemini_key_here
+# OPENAI_API_KEY=your_openai_key_here  (if using OpenAI)
+
+
+----------------------------------------------------------------
+  OLLAMA COMMANDS (Local LLM)
+----------------------------------------------------------------
+
+# Install Ollama (Windows)
+# Download from: https://ollama.com/download/windows
+
+# Check Ollama version
+ollama --version
+
+# Pull a model (one-time download)
+ollama pull llama3
+ollama pull llama3.1
+ollama pull mistral
+ollama pull codellama          # Best for code review tasks
+ollama pull deepseek-coder     # Alternative for code tasks
+ollama pull gemma3
+
+# List all downloaded models
+ollama list
+
+# Run a model interactively (test it)
+ollama run codellama
+ollama run llama3
+
+# Start Ollama server (if not running as service)
+ollama serve
+
+# Check if Ollama server is running
+curl http://localhost:11434/api/tags
+
+# Remove a model
+ollama rm llama3
+
+# Show model info
+ollama show codellama
+
+# Pull a specific model size
+ollama pull llama3:8b
+ollama pull llama3:70b
+ollama pull codellama:13b
+
+# Ollama API base URL (use in .env)
+# OLLAMA_BASE_URL=http://localhost:11434
+
+# Check Ollama running models
+curl http://localhost:11434/api/ps
+
+# Stop a running model
+curl -X DELETE http://localhost:11434/api/cancel
+
+
+----------------------------------------------------------------
+  RUNNING THE PROJECT
+----------------------------------------------------------------
+
+# Terminal 1 — Start Backend (from backend/)
+cd backend
+poetry run uvicorn main:app --reload --port 8000
+
+# Terminal 2 — Start Frontend (from frontend/)
+cd frontend
+npm run dev
+
+# Open in browser
+http://localhost:3000
+
+# Backend API docs (Swagger UI)
+http://localhost:8000/docs
+
+
+----------------------------------------------------------------
+  RUNNING TESTS
+----------------------------------------------------------------
+
+# Navigate to backend first
+cd backend
+
+# Run all tests at once
+python tests/run_all_tests.py
+
+# Run individual tests
+python tests/test_context_builder.py
+python tests/test_validators.py
+python tests/test_pipeline_accuracy.py
+python tests/test_pdf_generation.py
+
+
+----------------------------------------------------------------
+  API ENDPOINTS
+----------------------------------------------------------------
+
+POST   /analyze                        Upload file and start analysis
+GET    /status/{session_id}            Poll pipeline progress
+GET    /report/{session_id}/json       Get JSON report
+GET    /report/{session_id}/markdown   Get Markdown report
+GET    /report/{session_id}/pdf        Download PDF report
+GET    /report/{session_id}/sarif      Get SARIF report
+DELETE /session/{session_id}           Cleanup temp files
+GET    /                               Health check
+
+
+----------------------------------------------------------------
+  USEFUL DEV COMMANDS
+----------------------------------------------------------------
+
+# Check backend dependencies
+cd backend
+poetry show
+
+# Add a new backend package
+poetry add <package-name>
+
+# Add a dev-only package
+poetry add --group dev <package-name>
+
+# View installed packages
+poetry show --tree
+
+# Run a single Python file directly
+poetry run python <filename>.py
+
+# Activate poetry shell (optional)
+poetry shell
+
+# Deactivate poetry shell
+exit
+
+# Install frontend packages
+cd frontend
+npm install <package-name>
+
+# Build frontend for production
+npm run build
+
+# Check frontend for lint errors
+npm run lint
+
+
+----------------------------------------------------------------
+  REPORT FILE LOCATIONS
+----------------------------------------------------------------
+
+reports/<session_id>.json      → Machine-readable findings
+reports/<session_id>.md        → Human-readable markdown
+reports/<session_id>.pdf       → Professional PDF report
+reports/<session_id>.sarif     → SARIF format (IDE integration)
+
+
+----------------------------------------------------------------
+  TROUBLESHOOTING
+----------------------------------------------------------------
+
+# ModuleNotFoundError in tests
+# → Add to top of test file:
+#   import sys, os
+#   sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Port 8000 already in use
+poetry run uvicorn main:app --reload --port 8001
+
+# Port 3000 already in use
+npm run dev -- --port 3001
+
+# Clear temp uploads manually
+cd backend
+rmdir /s /q temp_uploads        # Windows
+rm -rf temp_uploads             # Linux/Mac
+mkdir temp_uploads
+
+# Clear all reports manually
+cd backend
+rmdir /s /q reports             # Windows
+rm -rf reports                  # Linux/Mac
+mkdir reports
+
+# Reinstall all backend dependencies
+poetry install --no-cache
+
+# Reinstall all frontend dependencies
+cd frontend
+rm -rf node_modules
+npm install
+
+# Check if uvicorn is running
+curl http://localhost:8000/
+
+
+----------------------------------------------------------------
+  GIT COMMANDS
+----------------------------------------------------------------
+
+# Check status
+git status
+
+# Stage all changes
+git add .
+
+# Commit
+git commit -m "your message"
+
+# Push
+git push origin main
+
+# Pull latest
+git pull origin main
+
+# Create new branch
+git checkout -b feature/your-feature-name
+
+# Switch branch
+git checkout main
+
+
+================================================================
+  END OF COMMANDS REFERENCE
+================================================================
