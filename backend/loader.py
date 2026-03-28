@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-# ── Data Model ───────────────────────────────────────────────────────────────
+# ── Data Model ──────────────────────────────────────────────────────────────────
 
 @dataclass
 class CodeChunk:
@@ -17,12 +17,12 @@ class CodeChunk:
     content: str
     start_line: int
     end_line: int
-    ast_node_type: str        # "function", "class", "module", "block"
-    ast_node_name: str        # function/class name if available
+    ast_node_type: str
+    ast_node_name: str
     token_count: int
-    is_approximate: bool      # True if fallback token chunker was used
+    is_approximate: bool
 
-# ── Language Detection ────────────────────────────────────────────────────────
+# ── Language Detection ──────────────────────────────────────────────────────────
 
 EXTENSION_MAP = {
     ".py":   "python",
@@ -37,7 +37,7 @@ def detect_language(file_path: str) -> Optional[str]:
     ext = Path(file_path).suffix.lower()
     return EXTENSION_MAP.get(ext, None)
 
-# ── Token Counter ─────────────────────────────────────────────────────────────
+# ── Token Counter ───────────────────────────────────────────────────────────────
 
 def count_tokens(text: str, model: str = "gpt-4o") -> int:
     try:
@@ -46,17 +46,75 @@ def count_tokens(text: str, model: str = "gpt-4o") -> int:
         enc = tiktoken.get_encoding("cl100k_base")
     return len(enc.encode(text))
 
-# ── Python AST Chunker ────────────────────────────────────────────────────────
+
+# ── Chunk Merger ────────────────────────────────────────────────────────────────
+
+def merge_small_chunks(
+    chunks: List[CodeChunk],
+    max_tokens: int = 1200,
+    min_tokens: int = 300,
+) -> List[CodeChunk]:
+    """
+    Merges consecutive small chunks that are below min_tokens into
+    a single chunk, as long as the combined size stays under max_tokens.
+    Chunks already above min_tokens are kept as-is.
+    This reduces LLM calls while preserving all code and line metadata.
+    """
+    if not chunks:
+        return chunks
+
+    merged = []
+    buffer: List[CodeChunk] = []
+    buffer_tokens = 0
+
+    for chunk in chunks:
+        if buffer_tokens + chunk.token_count <= max_tokens:
+            buffer.append(chunk)
+            buffer_tokens += chunk.token_count
+        else:
+            # Flush buffer
+            if buffer:
+                merged.append(_combine_buffer(buffer))
+            buffer = [chunk]
+            buffer_tokens = chunk.token_count
+
+    if buffer:
+        merged.append(_combine_buffer(buffer))
+
+    return merged
+
+
+def _combine_buffer(buffer: List[CodeChunk]) -> CodeChunk:
+    if len(buffer) == 1:
+        return buffer[0]
+
+    combined_content = "\n\n".join(c.content for c in buffer)
+    names = [c.ast_node_name for c in buffer if c.ast_node_name != "<module>"]
+    combined_name = "+".join(names[:3]) + ("..." if len(names) > 3 else "")
+
+    return CodeChunk(
+        chunk_id=buffer[0].chunk_id,           # keep first chunk's ID as anchor
+        file_path=buffer[0].file_path,
+        language=buffer[0].language,
+        content=combined_content,
+        start_line=buffer[0].start_line,
+        end_line=buffer[-1].end_line,           # span full range
+        ast_node_type="merged_block",
+        ast_node_name=combined_name,
+        token_count=count_tokens(combined_content),
+        is_approximate=False,
+    )
+
+
+# ── Python AST Chunker ──────────────────────────────────────────────────────────
 
 def chunk_python_by_ast(source: str, file_path: str) -> List[CodeChunk]:
-    """Split Python source into function/class-level chunks using AST."""
     chunks = []
     lines = source.splitlines()
 
     try:
         tree = ast.parse(source)
     except SyntaxError:
-        # fallback to token chunker if AST parsing fails
         return []
 
     nodes_to_extract = []
@@ -64,20 +122,16 @@ def chunk_python_by_ast(source: str, file_path: str) -> List[CodeChunk]:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             nodes_to_extract.append(node)
 
-    # Sort by line number
     nodes_to_extract.sort(key=lambda n: n.lineno)
 
-    # Track covered lines to find module-level code
     covered_lines = set()
     for node in nodes_to_extract:
         end = getattr(node, "end_lineno", node.lineno)
         for l in range(node.lineno, end + 1):
             covered_lines.add(l)
 
-    # Extract each function/class as a chunk
     for node in nodes_to_extract:
         end_line = getattr(node, "end_lineno", node.lineno)
-        # Include up to 3 context lines before the node
         ctx_start = max(1, node.lineno - 3)
         snippet_lines = lines[ctx_start - 1: end_line]
         content = "\n".join(snippet_lines)
@@ -103,7 +157,6 @@ def chunk_python_by_ast(source: str, file_path: str) -> List[CodeChunk]:
             is_approximate=False,
         ))
 
-    # Handle module-level code (imports, globals) not covered by any node
     module_lines = [
         (i + 1, line) for i, line in enumerate(lines)
         if (i + 1) not in covered_lines and line.strip()
@@ -125,28 +178,23 @@ def chunk_python_by_ast(source: str, file_path: str) -> List[CodeChunk]:
             is_approximate=False,
         ))
 
-    return sorted(chunks, key=lambda c: c.start_line)
+    chunks = sorted(chunks, key=lambda c: c.start_line)
+    return merge_small_chunks(chunks, max_tokens=1200, min_tokens=300)
 
 
-# ── Regex-Based Chunker for Java / JavaScript ─────────────────────────────────
+# ── Regex-Based Chunker for Java / JavaScript ───────────────────────────────────
 
 def chunk_by_regex(source: str, file_path: str, language: str) -> List[CodeChunk]:
-    """
-    Rough method/function chunker for Java and JavaScript using regex.
-    Falls back to token chunker if no matches found.
-    """
     chunks = []
     lines = source.splitlines()
 
     if language == "java":
-        # Match Java method signatures
         pattern = re.compile(
             r'^[ \t]*(public|private|protected|static|final|synchronized|abstract|native)?'
             r'[\s\w<>\[\],?]*\s+(\w+)\s*\([^)]*\)\s*(throws\s+[\w,\s]+)?\s*\{',
             re.MULTILINE
         )
     else:  # javascript
-        # Match JS function declarations, arrow functions, and method shorthand
         pattern = re.compile(
             r'^[ \t]*(async\s+)?function\s+(\w+)\s*\(|'
             r'^[ \t]*(?:const|let|var)\s+(\w+)\s*=\s*(async\s*)?\(?.*?\)?\s*=>|'
@@ -156,7 +204,7 @@ def chunk_by_regex(source: str, file_path: str, language: str) -> List[CodeChunk
 
     matches = list(pattern.finditer(source))
     if not matches:
-        return []  # trigger fallback
+        return []
 
     for i, match in enumerate(matches):
         start_char = match.start()
@@ -166,7 +214,6 @@ def chunk_by_regex(source: str, file_path: str, language: str) -> List[CodeChunk
         start_line = source[:start_char].count("\n") + 1
         end_line = start_line + block.count("\n")
 
-        # Extract function/method name
         groups = [g for g in match.groups() if g and g.strip() not in
                   ("public","private","protected","static","final","async","const","let","var")]
         node_name = groups[0].strip() if groups else f"block_{start_line}"
@@ -186,19 +233,20 @@ def chunk_by_regex(source: str, file_path: str, language: str) -> List[CodeChunk
             is_approximate=False,
         ))
 
-    return sorted(chunks, key=lambda c: c.start_line)
+    chunks = sorted(chunks, key=lambda c: c.start_line)
+    # ── Merge small functions into larger context windows ──────────────────────
+    return merge_small_chunks(chunks, max_tokens=1200, min_tokens=300)
 
 
-# ── Token-Based Fallback Chunker ──────────────────────────────────────────────
+# ── Token-Based Fallback Chunker ────────────────────────────────────────────────
 
 def chunk_by_tokens(
     source: str,
     file_path: str,
     language: str,
-    target_tokens: int = 1000,
-    overlap_tokens: int = 200,
+    target_tokens: int = 1200,
+    overlap_tokens: int = 150,
 ) -> List[CodeChunk]:
-    """Fallback: split source into overlapping token windows."""
     lines = source.splitlines()
     chunks = []
     current_lines = []
@@ -229,7 +277,6 @@ def chunk_by_tokens(
             ))
             chunk_index += 1
 
-            # Overlap: retain last N tokens worth of lines
             overlap_lines = []
             overlap_count = 0
             for line_num, line_text in reversed(current_lines):
@@ -242,7 +289,6 @@ def chunk_by_tokens(
             current_tokens = overlap_count
             start_line = current_lines[0][0] if current_lines else i + 1
 
-    # Remaining lines
     if current_lines:
         content = "\n".join(l for _, l in current_lines)
         chunks.append(CodeChunk(
@@ -261,20 +307,14 @@ def chunk_by_tokens(
     return chunks
 
 
-# ── Main CodeDocumentLoader ───────────────────────────────────────────────────
+# ── Main CodeDocumentLoader ─────────────────────────────────────────────────────
 
 class CodeDocumentLoader:
-    """
-    Loads source code files from a directory or single file path.
-    Tags each chunk with language, line numbers, and AST metadata.
-    """
-
     def __init__(self, source_path: str, language_override: Optional[str] = None):
         self.source_path = Path(source_path)
         self.language_override = language_override
 
     def load(self) -> List[CodeChunk]:
-        """Returns a flat list of CodeChunk objects from all discovered files."""
         all_chunks: List[CodeChunk] = []
 
         if self.source_path.is_file():
@@ -305,13 +345,11 @@ class CodeDocumentLoader:
         if not source.strip():
             return []
 
-        # Try AST chunking first
         if language == "python":
             chunks = chunk_python_by_ast(source, file_path)
         else:
             chunks = chunk_by_regex(source, file_path, language)
 
-        # Fallback to token chunker
         if not chunks:
             print(f"[Loader] AST chunking failed for {file_path}, using token fallback.")
             chunks = chunk_by_tokens(source, file_path, language)
@@ -319,7 +357,7 @@ class CodeDocumentLoader:
         return chunks
 
 
-# ── Quick test (run this file directly to verify) ─────────────────────────────
+# ── Quick test ──────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import sys
@@ -329,8 +367,6 @@ if __name__ == "__main__":
     for c in chunks:
         print(f"\n{'='*60}")
         print(f"Chunk ID    : {c.chunk_id}")
-        print(f"File        : {c.file_path}")
-        print(f"Language    : {c.language}")
         print(f"Node Type   : {c.ast_node_type} → {c.ast_node_name}")
         print(f"Lines       : {c.start_line} – {c.end_line}")
         print(f"Tokens      : {c.token_count}  |  Approximate: {c.is_approximate}")

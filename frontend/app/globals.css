@@ -1,0 +1,285 @@
+/* app/globals.css */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Sora:wght@300;400;500;600;700&display=swap');
+
+/* globals.css — Tailwind v4 theme config (replaces tailwind.config.ts) */
+
+@import "tailwindcss";
+
+@theme {
+  --color-base:     #090C10;
+  --color-surface:  #0D1117;
+  --color-elevated: #161B22;
+  --color-hover:    #1C2128;
+  --color-accent:   #00D4FF;
+  --color-critical: #FF3B3B;
+  --color-high:     #FF6B35;
+  --color-medium:   #FFB347;
+  --color-low:      #4A9EFF;
+
+  --font-family-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-family-body: "Sora", "DM Sans", sans-serif;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Variables ──────────────────────────────────────────────────────────── */
+
+:root {
+  /* Backgrounds */
+  --bg-base:        #090C10;
+  --bg-surface:     #0D1117;
+  --bg-elevated:    #161B22;
+  --bg-code:        #0D1117;
+  --bg-hover:       #1C2128;
+
+  /* Accent */
+  --accent:         #00D4FF;
+  --accent-dim:     rgba(0, 212, 255, 0.12);
+  --accent-border:  rgba(0, 212, 255, 0.20);
+  --accent-glow:    rgba(0, 212, 255, 0.35);
+
+  /* Severity */
+  --sev-critical:   #FF3B3B;
+  --sev-high:       #FF6B35;
+  --sev-medium:     #FFB347;
+  --sev-low:        #4A9EFF;
+  --sev-info:       #6B7280;
+
+  /* Severity dim backgrounds */
+  --sev-critical-bg: rgba(255, 59, 59, 0.10);
+  --sev-high-bg:     rgba(255, 107, 53, 0.10);
+  --sev-medium-bg:   rgba(255, 179, 71, 0.10);
+  --sev-low-bg:      rgba(74, 158, 255, 0.10);
+  --sev-info-bg:     rgba(107, 114, 128, 0.10);
+
+  /* Agent colors */
+  --agent-bug:         #FF6B6B;
+  --agent-security:    #FF6B35;
+  --agent-performance: #A78BFA;
+  --agent-style:       #34D399;
+
+  /* Text */
+  --text-primary:   #E6EDF3;
+  --text-secondary: #8B949E;
+  --text-muted:     #484F58;
+  --text-accent:    #00D4FF;
+
+  /* Borders */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-accent:  rgba(0, 212, 255, 0.25);
+
+  /* Fonts */
+  --font-mono:      'JetBrains Mono', 'Fira Code', monospace;
+  --font-body:      'Sora', 'DM Sans', sans-serif;
+}
+
+/* ── Base Reset ─────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-border);
+}
+
+/* ── Utility Classes ────────────────────────────────────────────────────────── */
+
+.surface {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.surface-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+}
+
+.accent-border {
+  border: 1px solid var(--accent-border);
+}
+
+/* ── Severity Badge ─────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-left: 3px solid;
+}
+
+.badge-critical { color: var(--sev-critical); background: var(--sev-critical-bg); border-color: var(--sev-critical); }
+.badge-high     { color: var(--sev-high);     background: var(--sev-high-bg);     border-color: var(--sev-high);     }
+.badge-medium   { color: var(--sev-medium);   background: var(--sev-medium-bg);   border-color: var(--sev-medium);   }
+.badge-low      { color: var(--sev-low);      background: var(--sev-low-bg);      border-color: var(--sev-low);      }
+.badge-info     { color: var(--sev-info);     background: var(--sev-info-bg);     border-color: var(--sev-info);     }
+
+/* ── Glow Effects ───────────────────────────────────────────────────────────── */
+
+.glow-accent {
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.glow-accent-sm {
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.20);
+}
+
+.text-glow {
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+
+/* ── Animated Grid Background ───────────────────────────────────────────────── */
+
+.grid-bg {
+  background-image:
+    linear-gradient(var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Shimmer Skeleton ───────────────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0%   { background-position: -1000px 0; }
+  100% { background-position:  1000px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated) 25%,
+    var(--bg-hover)    50%,
+    var(--bg-elevated) 75%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 1.8s infinite linear;
+  border-radius: 4px;
+}
+
+/* ── Fade-in Stagger ────────────────────────────────────────────────────────── */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.4s ease forwards;
+}
+
+/* ── Pulse Ring (verdict badge) ─────────────────────────────────────────────── */
+
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 var(--accent-glow); }
+  70%  { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.pulse-ring {
+  animation: pulseRing 1.5s ease-out 3;
+}
+
+/* ── Code Block ─────────────────────────────────────────────────────────────── */
+
+.code-block {
+  background: var(--bg-code);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  overflow-x: auto;
+}
+
+/* ── Thin Divider ───────────────────────────────────────────────────────────── */
+
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
+  width: 100%;
+}
+
+/* ── Pipeline Stage Connector Line ──────────────────────────────────────────── */
+
+@keyframes flowLine {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+.stage-connector-active {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    transparent  50%,
+    var(--accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: flowLine 1.2s linear infinite;
+}
