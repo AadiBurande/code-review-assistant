@@ -39,16 +39,39 @@ export interface SubScores {
   style:       number;
 }
 
+// ── NEW: Plagiarism result type ───────────────────────────────────────────────
+
+export interface PlagiarismResult {
+  score:            number;
+  verdict:          string;
+  blocked:          boolean;
+  confidence?:      number;
+  summary?:         string;
+  evidence?:        string[];
+  remedies?:        string[];
+  heuristic_score?: number;
+  llm_score?:       number;
+  details?: {
+    heuristic_score:  number;
+    llm_score:        number;
+    block_threshold:  number;
+    language:         string;
+    filename:         string;
+    loc:              number;
+  };
+}
+
 export interface AnalysisReport {
-  job_id:          string;
-  filename:        string;
-  language:        string;
-  overall_score:   number;
-  sub_scores:      SubScores;
-  verdict:         "accept" | "needs_changes" | "reject";
-  total_findings:  number;
-  findings:        Finding[];
-  static_findings: Finding[];
+  job_id:             string;
+  filename:           string;
+  language:           string;
+  overall_score:      number;
+  sub_scores:         SubScores;
+  verdict:            "accept" | "needs_changes" | "reject";
+  total_findings:     number;
+  findings:           Finding[];
+  static_findings:    Finding[];
+  plagiarism_result?: PlagiarismResult;   // ← ADDED
 }
 
 export interface AnalysisStatus {
@@ -116,10 +139,11 @@ export function useAnalysisStatus(jobId: string | null) {
           performance: raw.sub_scores?.performance ?? 100,
           style:       raw.sub_scores?.style       ?? 100,
         },
-        verdict:        raw.verdict         ?? "needs_changes",
-        total_findings: raw.total_findings  ?? 0,
-        findings:       raw.findings        ?? [],
-        static_findings: raw.static_findings ?? [],
+        verdict:         raw.verdict          ?? "needs_changes",
+        total_findings:  raw.total_findings   ?? 0,
+        findings:        raw.findings         ?? [],
+        static_findings: raw.static_findings  ?? [],
+        plagiarism_result: raw.plagiarism_result ?? undefined,  // ← ADDED
       };
 
       setReport(normalized);

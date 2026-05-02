@@ -1,5 +1,7 @@
 # langgraph_pipeline.py
 import os
+import asyncio
+import hashlib
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import TypedDict, List, Dict, Any, Optional, Callable
@@ -17,10 +19,21 @@ from agents import (
 )
 from context_builder import build_context
 from validators import validate_findings
+from plagiarism_detector import detect_plagiarism, PlagiarismResult
 
 load_dotenv()
 
-# ── Shared Pipeline State ──────────────────────────────────────────────────────
+# ── File Hash Cache ───────────────────────────────────────────────────────────
+_STATIC_ANALYSIS_CACHE: Dict[str, List[Dict]] = {}
+
+def _file_hash(file_path: str) -> str:
+    try:
+        return hashlib.md5(Path(file_path).read_bytes()).hexdigest()
+    except OSError:
+        return file_path
+
+
+# ── Pipeline State ────────────────────────────────────────────────────────────
 
 class PipelineState(TypedDict):
     source_path:          str
@@ -35,48 +48,104 @@ class PipelineState(TypedDict):
     performance_findings: List[Dict]
     style_findings:       List[Dict]
     all_findings:         List[Dict]
+    plagiarism_result:    Optional[Dict]
+    blocked:              bool
     _status_callback:     Optional[Any]
 
 
-def _update(state: PipelineState, stage: str, message: str, progress: int):
+def _update(state, stage, message, progress):
     cb = state.get("_status_callback")
     if cb:
         cb(stage, message, progress)
 
-
-def _rebuild_chunks(state: PipelineState) -> List[CodeChunk]:
+def _rebuild_chunks(state):
     return [CodeChunk(**c) for c in state["chunks"]]
 
+def _relevant_static(chunk, static):
+    return [
+        f for f in static
+        if isinstance(f, dict) and "line" in f
+        and f.get("file_path") == chunk.file_path
+        and chunk.start_line <= f["line"] <= chunk.end_line
+    ]
 
-def _relevant_static(chunk: CodeChunk, static: List[Dict]) -> List[Dict]:
-    """Return static findings relevant to this chunk, skipping malformed entries."""
-    relevant = []
-    for f in static:
-        if not isinstance(f, dict):
-            continue
-        if "line" not in f:
-            print(f"  [Pipeline] ✗ Malformed static finding skipped: keys={list(f.keys())[:5]}")
-            continue
-        if (
-            f.get("file_path") == chunk.file_path
-            and chunk.start_line <= f["line"] <= chunk.end_line
-        ):
-            relevant.append(f)
-    return relevant
-
-
-def _read_full_file(file_path: str, fallback: str) -> str:
-    """Read the full source file for accurate line count validation."""
+def _read_full_file(file_path, fallback):
     try:
         return Path(file_path).read_text(encoding="utf-8", errors="ignore")
     except OSError:
         return fallback
 
 
-# ── Node 1: Ingest ─────────────────────────────────────────────────────────────
+# ── Node 0: Plagiarism Detection ──────────────────────────────────────────────
+
+def plagiarism_node(state: PipelineState) -> PipelineState:
+    _update(state, "plagiarism_check", "Checking for AI-generated or plagiarized code…", 3)
+    print("\n[Pipeline] Stage 0: Plagiarism / AI-Generation Detection...")
+
+    source_path = state["source_path"]
+    language    = state.get("language", "python")
+
+    try:
+        p = Path(source_path)
+        if p.is_file():
+            code     = p.read_text(encoding="utf-8", errors="ignore")
+            filename = p.name
+        elif p.is_dir():
+            exts  = {".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rb"}
+            parts = []
+            for fp in sorted(p.rglob("*")):
+                if fp.suffix in exts and fp.is_file():
+                    try:
+                        parts.append(fp.read_text(encoding="utf-8", errors="ignore"))
+                    except OSError:
+                        pass
+            code     = "\n".join(parts)
+            filename = str(source_path)
+        else:
+            code = ""
+            filename = str(source_path)
+    except Exception as e:
+        print(f"  [PlagiarismNode] Could not read source: {e}")
+        code = ""
+        filename = str(source_path)
+
+    if not code.strip():
+        return {**state, "plagiarism_result": None, "blocked": False}
+
+    result = detect_plagiarism(code=code, filename=filename, language=language)
+
+    result_dict = {
+        "score":           result.score,
+        "verdict":         result.verdict,
+        "blocked":         result.blocked,
+        "confidence":      result.confidence,
+        "evidence":        result.evidence,
+        "remedies":        result.remedies,
+        "summary":         result.summary,
+        "heuristic_score": result.heuristic_score,
+        "llm_score":       result.llm_score,
+        "details":         result.details,
+    }
+
+    if result.blocked:
+        _update(state, "plagiarism_check",
+                f"⚠️ BLOCKED — AI/Plagiarism score: {result.score:.0f}/100.", 100)
+        print(f"\n[Pipeline] ⚠️ BLOCKED. Score={result.score:.0f}. Halting.")
+        return {**state, "plagiarism_result": result_dict, "blocked": True}
+
+    _update(state, "plagiarism_check",
+            f"✔ Plagiarism check passed. Score: {result.score:.0f}/100.", 8)
+    return {**state, "plagiarism_result": result_dict, "blocked": False}
+
+
+def _should_continue(state: PipelineState) -> str:
+    return "end" if state.get("blocked", False) else "ingest"
+
+
+# ── Node 1: Ingest ────────────────────────────────────────────────────────────
 
 def ingest_node(state: PipelineState) -> PipelineState:
-    _update(state, "ingestion", "Ingesting source files…", 5)
+    _update(state, "ingestion", "Ingesting source files…", 12)
     print("\n[Pipeline] Stage 1: Ingesting source files...")
     loader = CodeDocumentLoader(
         source_path=state["source_path"],
@@ -84,205 +153,183 @@ def ingest_node(state: PipelineState) -> PipelineState:
     )
     chunks = loader.load()
     print(f"[Pipeline] Loaded {len(chunks)} chunk(s).")
-    _update(state, "ingestion", f"Loaded {len(chunks)} chunk(s).", 12)
+    _update(state, "ingestion", f"Loaded {len(chunks)} chunk(s).", 18)
     return {**state, "chunks": [c.__dict__ for c in chunks]}
 
 
-# ── Node 2: Static Analysis ────────────────────────────────────────────────────
+# ── Node 2: Static Analysis (with hash cache) ─────────────────────────────────
 
 def static_analysis_node(state: PipelineState) -> PipelineState:
-    _update(state, "static_analysis", "Running static analyzers…", 18)
+    _update(state, "static_analysis", "Running static analyzers…", 22)
     print("\n[Pipeline] Stage 2: Running static analyzers...")
     language   = state["language"]
     file_paths = list({c["file_path"] for c in state["chunks"]})
 
     all_static = []
     for fp in file_paths:
+        cache_key = _file_hash(fp)
+        if cache_key in _STATIC_ANALYSIS_CACHE:
+            cached = _STATIC_ANALYSIS_CACHE[cache_key]
+            print(f"  [StaticAnalysis] Cache hit for {fp} ({len(cached)} findings)")
+            all_static.extend(cached)
+            continue
         findings = run_static_analysis(fp, language)
         dicts    = findings_to_dict(findings)
         valid    = [d for d in dicts if isinstance(d, dict) and "line" in d]
-        if len(valid) != len(dicts):
-            print(f"  [Pipeline] ✗ Dropped {len(dicts) - len(valid)} malformed static findings")
+        _STATIC_ANALYSIS_CACHE[cache_key] = valid
         all_static.extend(valid)
 
-    print(f"[Pipeline] Static analysis complete: {len(all_static)} finding(s).")
-    _update(state, "static_analysis", f"Static analysis: {len(all_static)} finding(s).", 25)
+    print(f"[Pipeline] Static analysis: {len(all_static)} finding(s).")
+    _update(state, "static_analysis", f"Static: {len(all_static)} finding(s).", 28)
     return {**state, "static_findings": all_static}
 
 
-# ── Node 3: Bug Detection Agent ────────────────────────────────────────────────
+# ── Node 3: Parallel Agents ───────────────────────────────────────────────────
 
-def bug_agent_node(state: PipelineState) -> PipelineState:
-    _update(state, "bug_agent", "Running Bug Detection Agent…", 32)
-    print("\n[Pipeline] Stage 3a: Running Bug Detection Agent...")
-    chunks  = _rebuild_chunks(state)
-    static  = state["static_findings"]
-    debug   = state["debug"]
+async def _run_all_agents_async(chunks, static, project_context, debug):
+    import concurrent.futures
+    loop     = asyncio.get_event_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
-    all_findings = []
+    def _run(agent_fn, chunk):
+        try:
+            code_ctx = build_context(chunk.content, chunk.file_path)
+            ctx      = f"{project_context}\n\n{code_ctx}"
+            rel      = _relevant_static(chunk, static)
+            raw      = agent_fn(chunk, rel, ctx, debug)
+            raw_d    = [f.model_dump() for f in raw]
+            full     = _read_full_file(chunk.file_path, chunk.content)
+            return validate_findings(raw_d, full)
+        except Exception as e:
+            print(f"  [Agent] ✗ {chunk.file_path}: {e}")
+            return []
+
+    agents = [run_bug_detection_agent, run_security_agent,
+              run_performance_agent,   run_style_agent]
+    tasks  = [
+        loop.run_in_executor(executor, _run, agent_fn, chunk)
+        for agent_fn in agents
+        for chunk    in chunks
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    n = len(chunks)
+    def _flat(r_list):
+        return [item for r in r_list if isinstance(r, list) for item in r]
+
+    return (
+        _flat(results[0*n : 1*n]),   # bug
+        _flat(results[1*n : 2*n]),   # security
+        _flat(results[2*n : 3*n]),   # performance
+        _flat(results[3*n : 4*n]),   # style
+    )
+
+
+def parallel_agents_node(state: PipelineState) -> PipelineState:
+    _update(state, "agents", "Running all review agents in parallel…", 35)
+    print("\n[Pipeline] Stage 3: Running all 4 agents in parallel...")
+
+    chunks = _rebuild_chunks(state)
+    static = state["static_findings"]
+    debug  = state["debug"]
+    ctx    = state["project_context"]
+
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        bug_f, sec_f, perf_f, styl_f = loop.run_until_complete(
+            _run_all_agents_async(chunks, static, ctx, debug)
+        )
+        loop.close()
+    except Exception as e:
+        print(f"  [ParallelAgents] Async failed: {e}. Falling back to sequential.")
+        bug_f, sec_f, perf_f, styl_f = _run_sequential_fallback(chunks, static, ctx, debug)
+
+    total = len(bug_f) + len(sec_f) + len(perf_f) + len(styl_f)
+    print(f"  Bug={len(bug_f)} | Security={len(sec_f)} | Perf={len(perf_f)} | Style={len(styl_f)}")
+    _update(state, "agents", f"Agents complete: {total} total findings.", 85)
+
+    return {
+        **state,
+        "bug_findings":         bug_f,
+        "security_findings":    sec_f,
+        "performance_findings": perf_f,
+        "style_findings":       styl_f,
+    }
+
+
+def _run_sequential_fallback(chunks, static, ctx, debug):
+    bug_f, sec_f, perf_f, styl_f = [], [], [], []
     for chunk in chunks:
         try:
-            code_ctx         = build_context(chunk.content, chunk.file_path)
-            enriched_context = f"{state['project_context']}\n\n{code_ctx}"
-            relevant         = _relevant_static(chunk, static)
-            raw              = run_bug_detection_agent(chunk, relevant, enriched_context, debug)
-            raw_dicts        = [f.model_dump() for f in raw]
-            # ✅ Use full file content for accurate line count
-            full_code        = _read_full_file(chunk.file_path, chunk.content)
-            validated        = validate_findings(raw_dicts, full_code)
-            all_findings.extend(validated)
+            code_ctx = build_context(chunk.content, chunk.file_path)
+            enriched = f"{ctx}\n\n{code_ctx}"
+            rel      = _relevant_static(chunk, static)
+            full     = _read_full_file(chunk.file_path, chunk.content)
+
+            for agent_fn, lst in [
+                (run_bug_detection_agent, bug_f),
+                (run_security_agent,      sec_f),
+                (run_performance_agent,   perf_f),
+                (run_style_agent,         styl_f),
+            ]:
+                raw = agent_fn(chunk, rel, enriched, debug)
+                lst.extend(validate_findings([f.model_dump() for f in raw], full))
         except Exception as e:
-            print(f"  [BugAgent] ✗ Chunk {chunk.file_path} failed: {e} — skipping")
-            continue
-
-    print(f"[BugAgent] {len(all_findings)} validated finding(s).")
-    _update(state, "bug_agent", f"Bug agent: {len(all_findings)} finding(s).", 45)
-    return {**state, "bug_findings": all_findings}
+            print(f"  [Fallback] ✗ {chunk.file_path}: {e}")
+    return bug_f, sec_f, perf_f, styl_f
 
 
-# ── Node 4: Security Agent ─────────────────────────────────────────────────────
-
-def security_agent_node(state: PipelineState) -> PipelineState:
-    _update(state, "security_agent", "Running Security Audit Agent…", 52)
-    print("\n[Pipeline] Stage 3b: Running Security Audit Agent...")
-    chunks  = _rebuild_chunks(state)
-    static  = state["static_findings"]
-    debug   = state["debug"]
-
-    all_findings = []
-    for chunk in chunks:
-        try:
-            code_ctx         = build_context(chunk.content, chunk.file_path)
-            enriched_context = f"{state['project_context']}\n\n{code_ctx}"
-            relevant         = _relevant_static(chunk, static)
-            raw              = run_security_agent(chunk, relevant, enriched_context, debug)
-            raw_dicts        = [f.model_dump() for f in raw]
-            # ✅ Use full file content for accurate line count
-            full_code        = _read_full_file(chunk.file_path, chunk.content)
-            validated        = validate_findings(raw_dicts, full_code)
-            all_findings.extend(validated)
-        except Exception as e:
-            print(f"  [SecurityAgent] ✗ Chunk {chunk.file_path} failed: {e} — skipping")
-            continue
-
-    print(f"[SecurityAgent] {len(all_findings)} validated finding(s).")
-    _update(state, "security_agent", f"Security agent: {len(all_findings)} finding(s).", 62)
-    return {**state, "security_findings": all_findings}
-
-
-# ── Node 5: Performance Agent ──────────────────────────────────────────────────
-
-def performance_agent_node(state: PipelineState) -> PipelineState:
-    _update(state, "performance_agent", "Running Performance Agent…", 68)
-    print("\n[Pipeline] Stage 3c: Running Performance Agent...")
-    chunks  = _rebuild_chunks(state)
-    static  = state["static_findings"]
-    debug   = state["debug"]
-
-    all_findings = []
-    for chunk in chunks:
-        try:
-            code_ctx         = build_context(chunk.content, chunk.file_path)
-            enriched_context = f"{state['project_context']}\n\n{code_ctx}"
-            relevant         = _relevant_static(chunk, static)
-            raw              = run_performance_agent(chunk, relevant, enriched_context, debug)
-            raw_dicts        = [f.model_dump() for f in raw]
-            # ✅ Use full file content for accurate line count
-            full_code        = _read_full_file(chunk.file_path, chunk.content)
-            validated        = validate_findings(raw_dicts, full_code)
-            all_findings.extend(validated)
-        except Exception as e:
-            print(f"  [PerfAgent] ✗ Chunk {chunk.file_path} failed: {e} — skipping")
-            continue
-
-    print(f"[PerfAgent] {len(all_findings)} validated finding(s).")
-    _update(state, "performance_agent", f"Performance agent: {len(all_findings)} finding(s).", 78)
-    return {**state, "performance_findings": all_findings}
-
-
-# ── Node 6: Style Agent ────────────────────────────────────────────────────────
-
-def style_agent_node(state: PipelineState) -> PipelineState:
-    _update(state, "style_agent", "Running Style Agent…", 82)
-    print("\n[Pipeline] Stage 3d: Running Style Agent...")
-    chunks  = _rebuild_chunks(state)
-    static  = state["static_findings"]
-    debug   = state["debug"]
-
-    all_findings = []
-    for chunk in chunks:
-        try:
-            code_ctx         = build_context(chunk.content, chunk.file_path)
-            enriched_context = f"{state['project_context']}\n\n{code_ctx}"
-            relevant         = _relevant_static(chunk, static)
-            raw              = run_style_agent(chunk, relevant, enriched_context, debug)
-            raw_dicts        = [f.model_dump() for f in raw]
-            # ✅ Use full file content for accurate line count
-            full_code        = _read_full_file(chunk.file_path, chunk.content)
-            validated        = validate_findings(raw_dicts, full_code)
-            all_findings.extend(validated)
-        except Exception as e:
-            print(f"  [StyleAgent] ✗ Chunk {chunk.file_path} failed: {e} — skipping")
-            continue
-
-    print(f"[StyleAgent] {len(all_findings)} validated finding(s).")
-    _update(state, "style_agent", f"Style agent: {len(all_findings)} finding(s).", 90)
-    return {**state, "style_findings": all_findings}
-
-
-# ── Node 7: Aggregator ─────────────────────────────────────────────────────────
+# ── Node 4: Aggregator ────────────────────────────────────────────────────────
 
 def aggregator_node(state: PipelineState) -> PipelineState:
-    _update(state, "aggregation", "Aggregating all findings…", 95)
-    print("\n[Pipeline] Stage 4: Aggregating all findings...")
+    _update(state, "aggregation", "Aggregating all findings…", 92)
+    print("\n[Pipeline] Stage 4: Aggregating findings...")
     all_findings = (
         state.get("bug_findings",         []) +
         state.get("security_findings",    []) +
         state.get("performance_findings", []) +
         state.get("style_findings",       [])
     )
-    print(f"[Aggregator] Total raw findings before deduplication: {len(all_findings)}")
+    print(f"[Aggregator] Total: {len(all_findings)} findings before dedup.")
     return {**state, "all_findings": all_findings}
 
 
-# ── Build LangGraph ────────────────────────────────────────────────────────────
+# ── Build Graph ───────────────────────────────────────────────────────────────
 
 def build_pipeline() -> StateGraph:
     graph = StateGraph(PipelineState)
+    graph.add_node("plagiarism_check", plagiarism_node)
+    graph.add_node("ingest",           ingest_node)
+    graph.add_node("static_analysis",  static_analysis_node)
+    graph.add_node("parallel_agents",  parallel_agents_node)
+    graph.add_node("aggregator",       aggregator_node)
 
-    graph.add_node("ingest",            ingest_node)
-    graph.add_node("static_analysis",   static_analysis_node)
-    graph.add_node("bug_agent",         bug_agent_node)
-    graph.add_node("security_agent",    security_agent_node)
-    graph.add_node("performance_agent", performance_agent_node)
-    graph.add_node("style_agent",       style_agent_node)
-    graph.add_node("aggregator",        aggregator_node)
-
-    graph.set_entry_point("ingest")
-    graph.add_edge("ingest",            "static_analysis")
-    graph.add_edge("static_analysis",   "bug_agent")
-    graph.add_edge("bug_agent",         "security_agent")
-    graph.add_edge("security_agent",    "performance_agent")
-    graph.add_edge("performance_agent", "style_agent")
-    graph.add_edge("style_agent",       "aggregator")
-    graph.add_edge("aggregator",        END)
-
+    graph.set_entry_point("plagiarism_check")
+    graph.add_conditional_edges(
+        "plagiarism_check",
+        _should_continue,
+        {"ingest": "ingest", "end": END},
+    )
+    graph.add_edge("ingest",          "static_analysis")
+    graph.add_edge("static_analysis", "parallel_agents")
+    graph.add_edge("parallel_agents", "aggregator")
+    graph.add_edge("aggregator",       END)
     return graph.compile()
 
 
-# ── Public Runner ──────────────────────────────────────────────────────────────
+# ── Public Runner ─────────────────────────────────────────────────────────────
 
 def run_pipeline(
-    source_path:      str,
-    project_name:     str = "unnamed_project",
-    language:         str = "python",
-    project_context:  str = "",
-    debug:            bool = False,
-    status_callback:  Optional[Callable[[str, str, int], None]] = None,
+    source_path:     str,
+    project_name:    str = "unnamed_project",
+    language:        str = "python",
+    project_context: str = "",
+    debug:           bool = False,
+    status_callback: Optional[Callable[[str, str, int], None]] = None,
 ) -> PipelineState:
 
     pipeline = build_pipeline()
-
     initial_state: PipelineState = {
         "source_path":          source_path,
         "project_name":         project_name,
@@ -296,36 +343,18 @@ def run_pipeline(
         "performance_findings": [],
         "style_findings":       [],
         "all_findings":         [],
+        "plagiarism_result":    None,
+        "blocked":              False,
         "_status_callback":     status_callback,
     }
 
-    print(f"\n{'='*60}")
-    print(f"  AI Code Review Pipeline Starting")
-    print(f"  Project : {project_name}")
-    print(f"  Language: {language}")
-    print(f"  Path    : {source_path}")
-    print(f"{'='*60}")
-
+    print(f"\n{'='*60}\n  Project: {project_name} | Language: {language}\n{'='*60}")
     final_state = pipeline.invoke(initial_state)
 
-    print(f"\n{'='*60}")
-    print(f"  Pipeline Complete!")
-    print(f"  Total findings: {len(final_state['all_findings'])}")
-    print(f"{'='*60}\n")
+    if final_state.get("blocked"):
+        pr = final_state.get("plagiarism_result", {})
+        print(f"\n{'='*60}\n  BLOCKED | Score: {pr.get('score',0):.0f} | {pr.get('verdict')}\n{'='*60}\n")
+    else:
+        print(f"\n{'='*60}\n  Complete! Findings: {len(final_state['all_findings'])}\n{'='*60}\n")
 
     return final_state
-
-
-# ── Quick Test ─────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    result = run_pipeline(
-        source_path="tests/sample_inputs/all_issues.py",
-        project_name="test_project",
-        language="python",
-        debug=False,
-    )
-    print(f"\nAll Findings ({len(result['all_findings'])} total):")
-    for f in result["all_findings"]:
-        print(f"  [{f['severity']}] {f['issue_type'].upper()} | "
-              f"Line {f['start_line']} | {f['description'][:80]}")

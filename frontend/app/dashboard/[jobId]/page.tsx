@@ -38,7 +38,6 @@ function NavBar({ onBack }: { onBack: () => void }) {
       backdropFilter: "blur(12px)",
       borderBottom:   "1px solid var(--border-subtle)",
     }}>
-      {/* Logo / back */}
       <button
         onClick={onBack}
         style={{
@@ -69,7 +68,6 @@ function NavBar({ onBack }: { onBack: () => void }) {
         </span>
       </button>
 
-      {/* Right: new analysis */}
       <button
         onClick={onBack}
         style={{
@@ -102,6 +100,251 @@ function NavBar({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ── Plagiarism / AI-Detection Banner ─────────────────────────────────────────
+
+interface PlagiarismBannerProps {
+  result: {
+    score: number;
+    verdict: string;
+    blocked: boolean;
+    summary?: string;
+    evidence?: string[];
+    remedies?: string[];
+    heuristic_score?: number;
+    llm_score?: number;
+  };
+}
+
+function PlagiarismBanner({ result }: PlagiarismBannerProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const isBlocked    = result.blocked;
+  const isSuspicious = result.verdict === "SUSPICIOUS";
+  const score        = Math.round(result.score);
+
+  // Color scheme based on severity
+  const accentColor  = isBlocked    ? "#FF4444"
+                     : isSuspicious ? "#FF9500"
+                     :                "#4CAF50";
+  const bgColor      = isBlocked    ? "rgba(255, 68,  68,  0.08)"
+                     : isSuspicious ? "rgba(255,149,  0,  0.08)"
+                     :                "rgba( 76,175, 80,  0.08)";
+  const borderColor  = isBlocked    ? "rgba(255, 68,  68,  0.35)"
+                     : isSuspicious ? "rgba(255,149,  0,  0.35)"
+                     :                "rgba( 76,175, 80,  0.35)";
+
+  const icon  = isBlocked ? "🚫" : isSuspicious ? "⚠️" : "✅";
+  const label = isBlocked    ? "REVIEW BLOCKED — AI/Plagiarism Detected"
+              : isSuspicious ? "SUSPICIOUS — Possible AI/Plagiarism"
+              :                "PASSED — No Plagiarism Detected";
+
+  return (
+    <div style={{
+      background:   bgColor,
+      border:       `1px solid ${borderColor}`,
+      borderRadius: "10px",
+      marginBottom: "28px",
+      overflow:     "hidden",
+    }}>
+      {/* ── Header row ── */}
+      <div style={{
+        display:     "flex",
+        alignItems:  "center",
+        gap:         "12px",
+        padding:     "16px 20px",
+        cursor:      result.evidence?.length ? "pointer" : "default",
+        userSelect:  "none",
+      }}
+        onClick={() => result.evidence?.length && setExpanded(p => !p)}
+      >
+        {/* Score ring */}
+        <div style={{
+          flexShrink:    0,
+          width:         "52px",
+          height:        "52px",
+          borderRadius:  "50%",
+          border:        `2px solid ${accentColor}`,
+          display:       "flex",
+          flexDirection: "column",
+          alignItems:    "center",
+          justifyContent:"center",
+          background:    `${accentColor}18`,
+          boxShadow:     `0 0 12px ${accentColor}30`,
+        }}>
+          <span style={{ fontSize: "15px", fontWeight: 800, color: accentColor, fontFamily: "var(--font-mono)", lineHeight: 1 }}>
+            {score}
+          </span>
+          <span style={{ fontSize: "8px", color: accentColor, fontFamily: "var(--font-mono)", opacity: 0.8 }}>
+            /100
+          </span>
+        </div>
+
+        {/* Label + summary */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display:    "flex",
+            alignItems: "center",
+            gap:        "8px",
+            flexWrap:   "wrap",
+          }}>
+            <span style={{ fontSize: "13px" }}>{icon}</span>
+            <span style={{
+              fontFamily:    "var(--font-mono)",
+              fontSize:      "12px",
+              fontWeight:    700,
+              color:         accentColor,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}>
+              {label}
+            </span>
+            {isBlocked && (
+              <span style={{
+                fontFamily:   "var(--font-mono)",
+                fontSize:     "10px",
+                padding:      "2px 7px",
+                borderRadius: "4px",
+                background:   `${accentColor}22`,
+                border:       `1px solid ${accentColor}44`,
+                color:        accentColor,
+              }}>
+                Pipeline Halted
+              </span>
+            )}
+          </div>
+
+          {result.summary && (
+            <p style={{
+              fontFamily:  "var(--font-mono)",
+              fontSize:    "11px",
+              color:       "var(--text-muted)",
+              marginTop:   "4px",
+              lineHeight:  1.5,
+              whiteSpace:  "pre-wrap",
+            }}>
+              {/* Strip leading emoji from summary to avoid duplication */}
+              {result.summary.replace(/^[^\w]*/, "")}
+            </p>
+          )}
+        </div>
+
+        {/* Scores pills */}
+        <div style={{ display: "flex", gap: "8px", flexShrink: 0, alignItems: "center" }}>
+          {result.heuristic_score !== undefined && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+                {result.heuristic_score.toFixed(0)}
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Heuristic
+              </div>
+            </div>
+          )}
+          {result.heuristic_score !== undefined && result.llm_score !== undefined && (
+            <div style={{ width: "1px", height: "28px", background: "var(--border-subtle)" }} />
+          )}
+          {result.llm_score !== undefined && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+                {result.llm_score.toFixed(0)}
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                LLM
+              </div>
+            </div>
+          )}
+
+          {/* Expand chevron */}
+          {result.evidence?.length ? (
+            <div style={{
+              marginLeft:  "4px",
+              color:       "var(--text-muted)",
+              fontSize:    "12px",
+              transition:  "transform 0.2s ease",
+              transform:   expanded ? "rotate(180deg)" : "rotate(0deg)",
+            }}>
+              ▾
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* ── Expanded details ── */}
+      {expanded && (
+        <div style={{
+          borderTop:  `1px solid ${borderColor}`,
+          padding:    "16px 20px",
+          display:    "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap:        "16px",
+        }}>
+          {/* Evidence */}
+          {result.evidence && result.evidence.length > 0 && (
+            <div>
+              <div style={{
+                fontFamily:    "var(--font-mono)",
+                fontSize:      "10px",
+                color:         accentColor,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom:  "8px",
+              }}>
+                🔍 Evidence
+              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                {result.evidence.map((e, i) => (
+                  <li key={i} style={{
+                    fontFamily:  "var(--font-mono)",
+                    fontSize:    "11px",
+                    color:       "var(--text-secondary)",
+                    paddingLeft: "12px",
+                    position:    "relative",
+                    lineHeight:  1.5,
+                  }}>
+                    <span style={{ position: "absolute", left: 0, color: accentColor }}>›</span>
+                    {e}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Remedies */}
+          {result.remedies && result.remedies.length > 0 && (
+            <div>
+              <div style={{
+                fontFamily:    "var(--font-mono)",
+                fontSize:      "10px",
+                color:         "var(--accent)",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                marginBottom:  "8px",
+              }}>
+                💡 How to Fix
+              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                {result.remedies.map((r, i) => (
+                  <li key={i} style={{
+                    fontFamily:  "var(--font-mono)",
+                    fontSize:    "11px",
+                    color:       "var(--text-secondary)",
+                    paddingLeft: "12px",
+                    position:    "relative",
+                    lineHeight:  1.5,
+                  }}>
+                    <span style={{ position: "absolute", left: 0, color: "var(--accent)" }}>›</span>
+                    {r}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Loading state (pipeline running) ─────────────────────────────────────────
 
 function LoadingState({ stages, status }: {
@@ -118,7 +361,6 @@ function LoadingState({ stages, status }: {
       gap:            "32px",
       padding:        "32px",
     }}>
-      {/* Animated logo */}
       <div style={{
         fontFamily:  "var(--font-mono)",
         fontSize:    "32px",
@@ -148,7 +390,6 @@ function LoadingState({ stages, status }: {
         </p>
       </div>
 
-      {/* Pipeline tracker */}
       <div style={{ width: "100%", maxWidth: "860px" }}>
         <PipelineTracker
           stages={stages}
@@ -223,7 +464,6 @@ export default function DashboardPage() {
   const [activeFile,  setActiveFile]  = useState<string | null>(null);
   const [pageVisible, setPageVisible] = useState(false);
 
-  // Stagger page reveal on complete
   useEffect(() => {
     if (isComplete) {
       const t = setTimeout(() => setPageVisible(true), 100);
@@ -238,23 +478,27 @@ export default function DashboardPage() {
     ? [...(report.findings ?? []), ...(report.static_findings ?? [])]
     : [];
 
+  // ── Plagiarism blocked? Show minimal blocked view instead of full dashboard ──
+  const plagiarism       = report?.plagiarism_result;
+  const isPlagiarismBlocked = plagiarism?.blocked === true;
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div style={{ minHeight: "100vh" }}>
       <NavBar onBack={handleBack} />
 
-      {/* ── Pipeline still running ─────────────────────────────────────────── */}
+      {/* ── Pipeline still running ───────────────────────────────────────────── */}
       {!isComplete && !isFailed && (
         <LoadingState stages={stages} status={status} />
       )}
 
-      {/* ── Failed ─────────────────────────────────────────────────────────── */}
+      {/* ── Failed ──────────────────────────────────────────────────────────── */}
       {isFailed && (
         <ErrorState error={error ?? "Unknown error"} onBack={handleBack} />
       )}
 
-      {/* ── Complete — full dashboard ───────────────────────────────────────── */}
+      {/* ── Complete ────────────────────────────────────────────────────────── */}
       {isComplete && report && (
         <div style={{
           maxWidth:  "1400px",
@@ -300,11 +544,10 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Spacer */}
             <div style={{ flex: 1 }} />
 
-            {/* Finding count chips */}
-            {(["Critical","High","Medium","Low"] as const).map(sev => {
+            {/* Severity chips — only when NOT blocked */}
+            {!isPlagiarismBlocked && (["Critical","High","Medium","Low"] as const).map(sev => {
               const count = allFindings.filter(f => f.severity === sev).length;
               if (!count) return null;
               const colors: Record<string,string> = {
@@ -329,86 +572,134 @@ export default function DashboardPage() {
             })}
           </div>
 
-          {/* ── Pipeline tracker (completed state) ───────────────────────────── */}
+          {/* ── Pipeline tracker (completed state) ──────────────────────────── */}
           <div style={{ marginBottom: "32px" }}>
-            <PipelineTracker
-              stages={stages}
-              progress={100}
-            />
+            <PipelineTracker stages={stages} progress={100} />
           </div>
 
-          {/* ── Two-column layout ─────────────────────────────────────────────── */}
-          <div style={{
-            display:             "grid",
-            gridTemplateColumns: "340px 1fr",
-            gap:                 "24px",
-            alignItems:          "start",
-          }}>
+          {/* ── PLAGIARISM BANNER (always shown when present) ─────────────────── */}
+          {plagiarism && (
+            <PlagiarismBanner result={plagiarism} />
+          )}
 
-            {/* ── LEFT COLUMN ──────────────────────────────────────────────────── */}
+          {/* ── BLOCKED STATE — no findings to show ─────────────────────────── */}
+          {isPlagiarismBlocked ? (
             <div style={{
-              display:       "flex",
-              flexDirection: "column",
-              gap:           "24px",
-              position:      "sticky",
-              top:           "80px",
+              display:        "flex",
+              flexDirection:  "column",
+              alignItems:     "center",
+              justifyContent: "center",
+              padding:        "60px 24px",
+              gap:            "12px",
+              textAlign:      "center",
+              background:     "rgba(255,68,68,0.04)",
+              border:         "1px dashed rgba(255,68,68,0.25)",
+              borderRadius:   "12px",
             }}>
-
-              {/* Score gauge — bleeds slightly */}
-              <div style={{
-                background:   "var(--bg-surface)",
-                border:       "1px solid var(--border-subtle)",
-                borderRadius: "12px",
-                padding:      "28px 20px 20px",
-                display:      "flex",
-                flexDirection:"column",
-                alignItems:   "center",
-                gap:          "24px",
-                marginLeft:   "-8px",   // subtle bleed
-                marginRight:  "-4px",
+              <div style={{ fontSize: "48px" }}>🚫</div>
+              <h2 style={{
+                fontFamily:    "var(--font-mono)",
+                fontSize:      "16px",
+                fontWeight:    700,
+                color:         "var(--sev-critical, #FF4444)",
+                letterSpacing: "-0.02em",
               }}>
-                <ScoreGauge
-                  score={report.overall_score}
-                  verdict={report.verdict}
-                  animate={true}
-                />
-                <div style={{ width: "100%" }}>
-                  <SubScoreRings
-                    scores={report.sub_scores}
+                Analysis Blocked
+              </h2>
+              <p style={{
+                fontFamily: "var(--font-mono)",
+                fontSize:   "12px",
+                color:      "var(--text-muted)",
+                maxWidth:   "480px",
+                lineHeight: 1.6,
+              }}>
+                The pipeline was halted because this file exceeded the AI/plagiarism
+                threshold. No code review findings are available. See the banner above
+                for details and remediation steps.
+              </p>
+              <button
+                onClick={handleBack}
+                style={{
+                  marginTop:    "8px",
+                  padding:      "9px 22px",
+                  background:   "var(--bg-elevated)",
+                  border:       "1px solid var(--border-default)",
+                  borderRadius: "6px",
+                  color:        "var(--text-secondary)",
+                  fontFamily:   "var(--font-mono)",
+                  fontSize:     "12px",
+                  cursor:       "pointer",
+                }}
+              >
+                ← Submit a new file
+              </button>
+            </div>
+
+          ) : (
+            /* ── NORMAL DASHBOARD (not blocked) ────────────────────────────── */
+            <div style={{
+              display:             "grid",
+              gridTemplateColumns: "340px 1fr",
+              gap:                 "24px",
+              alignItems:          "start",
+            }}>
+              {/* LEFT COLUMN */}
+              <div style={{
+                display:       "flex",
+                flexDirection: "column",
+                gap:           "24px",
+                position:      "sticky",
+                top:           "80px",
+              }}>
+                <div style={{
+                  background:   "var(--bg-surface)",
+                  border:       "1px solid var(--border-subtle)",
+                  borderRadius: "12px",
+                  padding:      "28px 20px 20px",
+                  display:      "flex",
+                  flexDirection:"column",
+                  alignItems:   "center",
+                  gap:          "24px",
+                  marginLeft:   "-8px",
+                  marginRight:  "-4px",
+                }}>
+                  <ScoreGauge
+                    score={report.overall_score}
+                    verdict={report.verdict}
                     animate={true}
                   />
+                  <div style={{ width: "100%" }}>
+                    <SubScoreRings
+                      scores={report.sub_scores}
+                      animate={true}
+                    />
+                  </div>
                 </div>
+
+                <FileHeatmap
+                  findings={allFindings}
+                  activeFile={activeFile}
+                  onFileSelect={setActiveFile}
+                />
+
+                <ExportBar jobId={jobId} filename={report.filename} />
               </div>
 
-              {/* File heatmap */}
-              <FileHeatmap
-                findings={allFindings}
-                activeFile={activeFile}
-                onFileSelect={setActiveFile}
-              />
-
-              {/* Export bar */}
-              <ExportBar
-                jobId={jobId}
-                filename={report.filename}
-              />
+              {/* RIGHT COLUMN */}
+              <div>
+                <FindingsPanel
+                  findings={allFindings}
+                  activeFile={activeFile}
+                  onFileClick={(file) =>
+                    setActiveFile(prev => prev === file ? null : file)
+                  }
+                />
+              </div>
             </div>
-
-            {/* ── RIGHT COLUMN ─────────────────────────────────────────────────── */}
-            <div>
-              <FindingsPanel
-                findings={allFindings}
-                activeFile={activeFile}
-                onFileClick={(file) =>
-                  setActiveFile(prev => prev === file ? null : file)
-                }
-              />
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Keyframes ─────────────────────────────────────────────────────────── */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1;   }
