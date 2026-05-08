@@ -5,11 +5,14 @@ import re
 import time
 from typing import List, Dict, Any, Optional
 
+
 from dotenv import load_dotenv
 load_dotenv()
 
+
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ValidationError, field_validator
+
 
 from prompts import (
     BUG_DETECTION_PROMPT,
@@ -19,7 +22,9 @@ from prompts import (
     FINDING_SCHEMA,
 )
 
+
 # ── Pydantic Schema ───────────────────────────────────────────────────────────
+
 
 class Finding(BaseModel):
     file_path:          str
@@ -38,16 +43,19 @@ class Finding(BaseModel):
     references:         List[str]      = []
     internal_reasoning: Optional[str]  = None
 
+
     @field_validator("severity")
     @classmethod
     def validate_severity(cls, v):
         allowed = {"Critical", "High", "Medium", "Low", "Info"}
         return v if v in allowed else "Info"
 
+
     @field_validator("confidence")
     @classmethod
     def validate_confidence(cls, v):
         return max(0.0, min(1.0, float(v)))
+
 
     @field_validator("issue_type")
     @classmethod
@@ -55,15 +63,19 @@ class Finding(BaseModel):
         allowed = {"bug", "performance", "security", "style"}
         return v if v in allowed else "bug"
 
+
 # ── Constants ─────────────────────────────────────────────────────────────────
+
 
 REQUIRED_FINDING_KEYS = {
     "file_path", "start_line", "end_line", "issue_type",
     "severity", "confidence", "description", "remediation",
 }
 
+
 VALID_SEVERITIES  = {"Critical", "High", "Medium", "Low", "Info"}
 VALID_ISSUE_TYPES = {"bug", "security", "performance", "style"}
+
 
 ISSUE_TYPE_NORM = {
     "bug":           "bug",
@@ -80,6 +92,7 @@ ISSUE_TYPE_NORM = {
     "information":   "style",
 }
 
+
 FLAKE8_STYLE_CODES = {
     "E501","E221","E222","E225","E231","E241","E251",
     "E261","E262","E265","E266","E302","E303","E305",
@@ -87,49 +100,44 @@ FLAKE8_STYLE_CODES = {
     "W503","W504","C901",
 }
 
+
 STYLE_NOISE_DESC_FRAGMENTS = {
     "line too long","multiple spaces","trailing whitespace",
     "blank line","whitespace","indentation",
     "missing whitespace","operator spacing",
 }
 
+
 STYLE_ONLY_TAGS = {
     "line-length","line_length","operator-spacing",
     "whitespace","e501","trailing-whitespace",
 }
 
+
+# ── Text field length caps (prevents LLM verbosity from overflowing tokens) ───
+
+MAX_DESCRIPTION    = 400
+MAX_REMEDIATION    = 300
+MAX_PLAIN_PROBLEM  = 300
+MAX_WHY_IT_MATTERS = 300
+MAX_CODE_SUGGESTION= 500
+
+
 # ── Layer 2 Optimization: Code Pre-Processor ──────────────────────────────────
-# Strips blank lines and comment-only lines from code before sending to LLM.
-# Saves ~15-25% tokens on real-world code without losing any semantic content.
+
 
 def _preprocess_code(code: str, agent_type: str) -> str:
-    """
-    Strip token-wasting content from code before sending to the LLM.
-
-    Rules:
-    - Remove blank lines (never contain logic)
-    - Remove comment-only lines for bug/security/performance agents
-      (style agent needs to see comment coverage)
-    - Collapse 3+ consecutive blank lines into 1
-    - Preserve line numbers by replacing removed lines with a marker
-      so start_line/end_line references stay correct.
-
-    Returns cleaned code string.
-    """
-    lines = code.split("\n")
-    result = []
+    lines   = code.split("\n")
+    result  = []
     removed = 0
 
     for line in lines:
         stripped = line.strip()
 
-        # Always keep non-empty, non-comment lines
         if not stripped:
             removed += 1
-            continue  # skip blank lines entirely
+            continue
 
-        # For bug/security/performance: skip pure comment lines
-        # Style agent needs them to check docstring coverage
         if agent_type != "style":
             is_comment = (
                 stripped.startswith("#") or
@@ -152,10 +160,6 @@ def _preprocess_code(code: str, agent_type: str) -> str:
 
 
 def _smart_truncate(code: str, max_chars: int = 6000) -> str:
-    """
-    If code chunk is extremely large, keep the first 70% and last 30%.
-    This preserves function signatures (top) and return/error handling (bottom).
-    """
     if len(code) <= max_chars:
         return code
 
@@ -174,11 +178,8 @@ def _smart_truncate(code: str, max_chars: int = 6000) -> str:
 
 # ── Static Findings Filter ────────────────────────────────────────────────────
 
+
 def filter_static_for_agent(static_findings: List[Dict], agent_type: str) -> List[Dict]:
-    """
-    Route static findings to appropriate agents only.
-    Bug/Security agents must NOT see Flake8 style noise.
-    """
     if agent_type == "style":
         return static_findings
 
@@ -211,6 +212,7 @@ def filter_static_for_agent(static_findings: List[Dict], agent_type: str) -> Lis
 
 
 # ── Finding Shape Validator ───────────────────────────────────────────────────
+
 
 def _is_valid_finding_shape(item: Any) -> bool:
     if not isinstance(item, dict):
@@ -252,6 +254,7 @@ def _is_valid_finding_shape(item: Any) -> bool:
 
 # ── LLM Factory ───────────────────────────────────────────────────────────────
 
+
 def get_llm(temperature: float = 0.1):
     provider = os.getenv("LLM_PROVIDER", "ollama").lower()
 
@@ -260,7 +263,7 @@ def get_llm(temperature: float = 0.1):
         return ChatOpenAI(
             model=os.getenv("MODEL_NAME", "gpt-4o"),
             temperature=temperature,
-            max_tokens=2048,
+            max_tokens=4096,
             api_key=os.getenv("OPENAI_API_KEY"),
         )
     elif provider == "groq":
@@ -268,7 +271,7 @@ def get_llm(temperature: float = 0.1):
         return ChatGroq(
             model=os.getenv("MODEL_NAME", "llama-3.3-70b-versatile"),
             temperature=temperature,
-            max_tokens=2048,
+            max_tokens=4096,
             api_key=os.getenv("GROQ_API_KEY"),
         )
     elif provider == "gemini":
@@ -276,7 +279,7 @@ def get_llm(temperature: float = 0.1):
         return ChatGoogleGenerativeAI(
             model=os.getenv("MODEL_NAME", "gemini-2.0-flash"),
             temperature=temperature,
-            max_output_tokens=2048,
+            max_output_tokens=4096,
             google_api_key=os.getenv("GEMINI_API_KEY"),
         )
     elif provider == "ollama":
@@ -284,7 +287,8 @@ def get_llm(temperature: float = 0.1):
         return ChatOllama(
             model=os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b-instruct-q4_K_M"),
             temperature=temperature,
-            num_predict=2048,
+            num_predict=8192,                       # ← increased from 4096
+            num_ctx=8192,
         )
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {provider}")
@@ -292,8 +296,12 @@ def get_llm(temperature: float = 0.1):
 
 # ── Safe JSON Parser ──────────────────────────────────────────────────────────
 
+
 def safe_parse_json(raw: str) -> list:
     raw = raw.strip()
+
+    if len(raw) > 8000:
+        print(f"  [Agent] ⚠ Output very large ({len(raw)} chars) — possible num_predict overflow")
 
     try:
         result = json.loads(raw)
@@ -336,6 +344,7 @@ def safe_parse_json(raw: str) -> list:
 
 # ── Core Agent Runner ─────────────────────────────────────────────────────────
 
+
 def run_agent(
     prompt_template,
     code_chunk,
@@ -373,7 +382,7 @@ def run_agent(
         language        = code_chunk.language,
         start_line      = code_chunk.start_line,
         end_line        = code_chunk.end_line,
-        code_snippet    = processed_code,          # ← preprocessed, not raw
+        code_snippet    = processed_code,
         static_findings = static_text,
         project_context = project_context or "No project context provided.",
         schema          = FINDING_SCHEMA,
@@ -417,7 +426,6 @@ def run_agent(
     findings = []
     for item in raw_list:
         if isinstance(item, dict):
-            # Normalize issue_type
             raw_type   = str(item.get("issue_type", "")).lower().strip()
             normalized = ISSUE_TYPE_NORM.get(raw_type, raw_type)
             if normalized != item.get("issue_type"):
@@ -427,11 +435,10 @@ def run_agent(
         if not _is_valid_finding_shape(item):
             continue
 
-        # Fallback file_path
         if not item.get("file_path"):
             item["file_path"] = code_chunk.file_path
 
-        # Trim oversized arrays
+        # ── Trim oversized arrays ──
         if isinstance(item.get("references"), list):
             item["references"] = [
                 r.split("/")[-1] if isinstance(r, str) and r.startswith("http") else r
@@ -442,7 +449,19 @@ def run_agent(
         if isinstance(item.get("fix_steps"), list):
             item["fix_steps"] = item["fix_steps"][:5]
 
-        # Ensure new fields have defaults if LLM skipped them
+        # ── Cap text field lengths to prevent output bloat ──────────────────
+        if isinstance(item.get("description"), str):
+            item["description"]    = item["description"][:MAX_DESCRIPTION]
+        if isinstance(item.get("remediation"), str):
+            item["remediation"]    = item["remediation"][:MAX_REMEDIATION]
+        if isinstance(item.get("plain_problem"), str):
+            item["plain_problem"]  = item["plain_problem"][:MAX_PLAIN_PROBLEM]
+        if isinstance(item.get("why_it_matters"), str):
+            item["why_it_matters"] = item["why_it_matters"][:MAX_WHY_IT_MATTERS]
+        if isinstance(item.get("code_suggestion"), str):
+            item["code_suggestion"]= item["code_suggestion"][:MAX_CODE_SUGGESTION]
+
+        # ── Defaults for optional fields ──
         item.setdefault("plain_problem",  "")
         item.setdefault("why_it_matters", "")
         item.setdefault("fix_steps",      [])
@@ -463,12 +482,14 @@ def run_agent(
 
 # ── Individual Agent Functions ────────────────────────────────────────────────
 
+
 def run_bug_detection_agent(chunk, static_findings, project_context="", debug=False) -> List[Finding]:
     print(f"  [BugAgent] Analyzing {chunk.chunk_id} ...")
     return run_agent(
         BUG_DETECTION_PROMPT, chunk, static_findings,
         project_context, debug, temperature=0.1, agent_type="bug"
     )
+
 
 def run_security_agent(chunk, static_findings, project_context="", debug=False) -> List[Finding]:
     print(f"  [SecurityAgent] Analyzing {chunk.chunk_id} ...")
@@ -477,12 +498,14 @@ def run_security_agent(chunk, static_findings, project_context="", debug=False) 
         project_context, debug, temperature=0.0, agent_type="security"
     )
 
+
 def run_performance_agent(chunk, static_findings, project_context="", debug=False) -> List[Finding]:
     print(f"  [PerfAgent] Analyzing {chunk.chunk_id} ...")
     return run_agent(
         PERFORMANCE_PROMPT, chunk, static_findings,
         project_context, debug, temperature=0.2, agent_type="performance"
     )
+
 
 def run_style_agent(chunk, static_findings, project_context="", debug=False) -> List[Finding]:
     print(f"  [StyleAgent] Analyzing {chunk.chunk_id} ...")
@@ -493,6 +516,7 @@ def run_style_agent(chunk, static_findings, project_context="", debug=False) -> 
 
 
 # ── Quick Test ────────────────────────────────────────────────────────────────
+
 
 if __name__ == "__main__":
     from loader import CodeDocumentLoader

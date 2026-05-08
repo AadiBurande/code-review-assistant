@@ -6,14 +6,12 @@ import java.util.*;
 
 public class evil_java {
 
-    // Hardcoded credentials - Critical security issue
     private static final String DB_URL = "jdbc:mysql://localhost:3306/mydb";
     private static final String DB_USER = "root";
     private static final String DB_PASS = "admin@12345";
     private static final String SECRET_KEY = "hardcoded_jwt_secret_xyz";
     private static final String API_KEY = "sk-prod-hardcoded-key-123456";
 
-    // SQL Injection - No PreparedStatement
     public static ResultSet getUser(String username) throws Exception {
         Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
         Statement stmt = conn.createStatement();
@@ -21,7 +19,6 @@ public class evil_java {
         return stmt.executeQuery(query);
     }
 
-    // Command Injection via Runtime.exec
     public static String runCommand(String userInput) throws Exception {
         Runtime rt = Runtime.getRuntime();
         Process proc = rt.exec("ping " + userInput);
@@ -29,51 +26,41 @@ public class evil_java {
         return stdInput.readLine();
     }
 
-    // Weak MD5 hashing for passwords
     public static String hashPassword(String password) throws Exception {
         MessageDigest md = MessageDigest.getInstance("MD5");
         byte[] hash = md.digest(password.getBytes());
         return Base64.getEncoder().encodeToString(hash);
     }
 
-    // Weak SHA-1 for tokens
     public static String generateToken(String data) throws Exception {
         MessageDigest sha = MessageDigest.getInstance("SHA-1");
         return Base64.getEncoder().encodeToString(sha.digest(data.getBytes()));
     }
 
-    // Insecure Random - not cryptographically secure
     public static int generateOTP() {
         Random rand = new Random();
         return rand.nextInt(9999);
     }
 
-    // Path Traversal vulnerability
     public static String readFile(String filename) throws Exception {
         FileReader fr = new FileReader("/var/app/uploads/" + filename);
         BufferedReader br = new BufferedReader(fr);
         return br.readLine();
-        // fr and br never closed - resource leak
     }
 
-    // Resource leak - FileWriter not in try-with-resources
     public static void writeLog(String message) throws Exception {
         FileWriter fw = new FileWriter("app.log", true);
         fw.write(message);
-        // fw.close() missing - resource leak
     }
 
-    // Empty catch block - exception swallowed
     public static int divide(int a, int b) {
         try {
             return a / b;
         } catch (Exception e) {
-            // silently swallowed
         }
         return -1;
     }
 
-    // printStackTrace exposes internals
     public static void processPayment(double amount) {
         try {
             if (amount < 0) throw new Exception("Invalid amount");
@@ -83,61 +70,50 @@ public class evil_java {
         }
     }
 
-    // Null pointer - no null check
     public static String getUserEmail(String userId) {
         Map<String, String> db = null;
-        return db.get(userId).toUpperCase(); // NPE guaranteed
+        return db.get(userId).toUpperCase();
     }
 
-    // Infinite loop - no exit condition
     public static void pollServer() {
         while (true) {
             System.out.println("Polling...");
-            // no break or sleep - CPU burn
         }
     }
 
-    // Generic throws Exception - bad practice
     public static void processData(String data) throws Exception {
         if (data == null) throw new Exception("Null data");
         System.out.println(data);
     }
 
-    // Insecure HTTP connection (not HTTPS)
     public static String fetchData(String endpoint) throws Exception {
-        URL url = new URL("http://" + endpoint); // should be https
+        URL url = new URL("http://" + endpoint);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
         return conn.getResponseMessage();
     }
 
-    // System.out instead of logger
     public static void loginUser(String username, String password) {
-        System.out.println("Login attempt: " + username + " / " + password); // logs password!
+        System.out.println("Login attempt: " + username + " / " + password);
         System.out.println("Secret key used: " + SECRET_KEY);
     }
 
-    // Hardcoded IP address
     public static void connectToServer() throws Exception {
         Socket socket = new Socket("192.168.1.100", 8080);
-        System.out.println("Connected to hardcoded IP");
-        // socket never closed
+        System.out.println("Connected");
     }
 
-    // TODO left in production code
     public static void processOrder(String orderId) {
-        // TODO: add authentication check
-        // FIXME: this crashes on empty orderId
-        // HACK: temporary workaround
-        System.out.println("Processing order: " + orderId);
+        // TODO: add auth check
+        // FIXME: crashes on empty orderId
+        System.out.println("Processing: " + orderId);
     }
 
-    // Long parameter list
     public static void createUser(String name, String email, String password,
                                    String phone, String address, String city,
                                    String country, String zip, String role,
                                    String department, String manager) {
-        System.out.println("Creating user: " + name);
+        System.out.println("Creating: " + name);
     }
 
     public static void main(String[] args) throws Exception {

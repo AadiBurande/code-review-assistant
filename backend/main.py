@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Body
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,17 +16,21 @@ from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
 
+
 load_dotenv()
+
 
 from langgraph_pipeline import run_pipeline
 from aggregator import build_report, save_markdown_report
 from pdf_generator import generate_pdf_report
-from database import save_report, get_report, get_history
+from database import save_report, get_report, get_history, health_check as db_health_check
 from github_integration import fetch_github_repo, validate_github_url
+
 
 BASE_DIR    = Path(__file__).resolve().parent.parent
 TEMP_DIR    = BASE_DIR / "temp_uploads"
 REPORTS_DIR = BASE_DIR / "reports"
+
 
 
 class SuppressStatusLogs(logging.Filter):
@@ -33,9 +38,12 @@ class SuppressStatusLogs(logging.Filter):
         return "/status/" not in record.getMessage()
 
 
+
 logging.getLogger("uvicorn.access").addFilter(SuppressStatusLogs())
 
+
 jobs: dict = {}
+
 
 
 @asynccontextmanager
@@ -46,7 +54,9 @@ async def lifespan(app: FastAPI):
     print("[Server] Shutting down gracefully.")
 
 
+
 app = FastAPI(title="AI Code Review Assistant", version="1.1.0", lifespan=lifespan)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +66,9 @@ app.add_middleware(
 )
 
 
+
 # ── Flatten report helper ─────────────────────────────────────────────────────
+
 
 def flatten_report(report, session_id: str, filename: str, language: str) -> dict:
     all_findings = []
@@ -89,7 +101,9 @@ def flatten_report(report, session_id: str, filename: str, language: str) -> dic
     }
 
 
+
 # ── Core analysis job ─────────────────────────────────────────────────────────
+
 
 def run_analysis_job(
     session_id:      str,
@@ -158,8 +172,11 @@ def run_analysis_job(
         pdf_path = str(REPORTS_DIR / f"{session_id}.pdf")
         generate_pdf_report(report, pdf_path, plagiarism_result=plagiarism)
 
-        # ── Save to DB ────────────────────────────────────────────────────
-        save_report(flat)
+        # ── Save to DB (non-blocking, never crashes the job) ──────────────
+        try:
+            save_report(flat)
+        except Exception as db_err:
+            print(f"[DB] Save skipped: {db_err}")
 
         # ── Mark job complete ─────────────────────────────────────────────
         jobs[session_id].update({
@@ -189,14 +206,24 @@ def run_analysis_job(
         print(f"[Job Error] {session_id}: {e}")
 
 
+
 # ── Health check ──────────────────────────────────────────────────────────────
+
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "version": "1.1.0"}
+    # NEW: include DB status in health response
+    db_status = db_health_check()
+    return {
+        "status":   "ok",
+        "version":  "1.1.0",
+        "database": db_status,
+    }
+
 
 
 # ── File upload route ─────────────────────────────────────────────────────────
+
 
 @app.post("/analyze")
 async def analyze_code(
@@ -260,7 +287,9 @@ async def analyze_code(
     })
 
 
+
 # ── GitHub URL validation endpoint ────────────────────────────────────────────
+
 
 @app.get("/analyze/github/validate")
 async def validate_github(
@@ -273,7 +302,9 @@ async def validate_github(
     return JSONResponse(content=result)
 
 
+
 # ── GitHub analysis request schema ────────────────────────────────────────────
+
 
 class GitHubAnalyzeRequest(BaseModel):
     repo_url:        str
@@ -285,7 +316,9 @@ class GitHubAnalyzeRequest(BaseModel):
     debug:           bool          = False
 
 
+
 # ── GitHub analysis route ─────────────────────────────────────────────────────
+
 
 @app.post("/analyze/github")
 async def analyze_github(req: GitHubAnalyzeRequest):
@@ -372,7 +405,9 @@ async def analyze_github(req: GitHubAnalyzeRequest):
     })
 
 
+
 # ── Status endpoint ───────────────────────────────────────────────────────────
+
 
 @app.get("/status/{session_id}")
 def get_status(session_id: str):
@@ -410,16 +445,20 @@ def get_status(session_id: str):
     return response
 
 
+
 # ── Report endpoints ──────────────────────────────────────────────────────────
+
 
 @app.get("/report/{session_id}/json")
 def get_json_report(session_id: str):
-    # Try DB first
-    db_report = get_report(session_id)
-    if db_report:
-        return JSONResponse(content=db_report)
+    # Try DB first, fall back to local file
+    try:
+        db_report = get_report(session_id)
+        if db_report:
+            return JSONResponse(content=db_report)
+    except Exception:
+        pass
 
-    # Fall back to local file
     path = REPORTS_DIR / f"{session_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report not found.")
@@ -430,6 +469,7 @@ def get_json_report(session_id: str):
     return JSONResponse(content=data)
 
 
+
 @app.get("/report/{session_id}/markdown")
 def get_markdown_report(session_id: str):
     path = REPORTS_DIR / f"{session_id}.md"
@@ -438,12 +478,14 @@ def get_markdown_report(session_id: str):
     return FileResponse(str(path), media_type="text/markdown")
 
 
+
 @app.get("/report/{session_id}/pdf")
 def get_pdf_report(session_id: str):
     path = REPORTS_DIR / f"{session_id}.pdf"
     if not path.exists():
         raise HTTPException(status_code=404, detail="PDF report not found.")
     return FileResponse(str(path), media_type="application/pdf")
+
 
 
 @app.get("/report/{session_id}/sarif")
@@ -477,9 +519,15 @@ def get_sarif_report(session_id: str):
     return JSONResponse(content=sarif)
 
 
+
 @app.get("/history")
 def get_scan_history(limit: int = 50):
-    return JSONResponse(content=get_history(limit))
+    # NEW: fall back to empty list if DB unavailable — never 500
+    try:
+        return JSONResponse(content=get_history(limit))
+    except Exception:
+        return JSONResponse(content=[])
+
 
 
 @app.delete("/session/{session_id}")

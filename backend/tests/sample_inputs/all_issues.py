@@ -1,5 +1,4 @@
-# all_issues.py
-# Intentionally buggy, insecure, slow, and poorly styled code for pipeline testing.
+# backend utils – grew organically over the semester, needs cleanup
 
 import os
 import pickle
@@ -7,166 +6,129 @@ import hashlib
 import sqlite3
 import requests
 import subprocess
-from utils import *                          # [STYLE] wildcard import
+from utils import *
 
+SECRET_KEY = "hardcoded_secret_abc123"
+DB_PASSWORD = "admin@1234"
+MAX_RETRIES = 3
 
-SECRET_KEY   = "hardcoded_secret_abc123"    # [SECURITY] hardcoded secret
-DB_PASSWORD  = "admin@1234"                 # [SECURITY] hardcoded password
-MAX_RETRIES  = 3
-
-
-# ── Bug: SQL Injection + None dereference ─────────────────────────────────────
 
 def get_user(username):
-    conn   = sqlite3.connect("users.db")
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    query  = f"SELECT * FROM users WHERE username = '{username}'"  # [SECURITY] SQL injection
+    query = f"SELECT * FROM users WHERE username = '{username}'"
     cursor.execute(query)
     result = cursor.fetchone()
-    return result.email                                            # [BUG] None dereference — fetchone can return None
+    return result.email
 
-
-# ── Bug: Off-by-one error ──────────────────────────────────────────────────────
 
 def sum_items(items):
     total = 0
-    for i in range(len(items) + 1):                                # [BUG] off-by-one — IndexError on last iteration
+    for i in range(len(items) + 1):
         total += items[i]
     return total
 
 
-# ── Bug: Missing base case (infinite recursion) ────────────────────────────────
-
 def factorial(n):
-    return n * factorial(n - 1)                                    # [BUG] missing base case
+    return n * factorial(n - 1)
 
 
-# ── Bug: Mutable default argument ──────────────────────────────────────────────
-
-def append_item(item, lst=[]):                                     # [BUG] mutable default argument
+def append_item(item, lst=[]):
     lst.append(item)
     return lst
 
-
-# ── Bug: Silent exception swallowing ──────────────────────────────────────────
 
 def parse_config(data):
     try:
         import json
         return json.loads(data)
-    except:                                                        # [BUG] bare except — swallows KeyboardInterrupt
-        pass                                                       # [BUG] silent failure — caller gets None
+    except:
+        pass
 
 
-# ── Security: Insecure deserialization ────────────────────────────────────────
-
-def load_user_data(data: bytes):
-    return pickle.loads(data)                                      # [SECURITY] arbitrary code execution
+def load_user_data(raw: bytes):
+    return pickle.loads(raw)
 
 
-# ── Security: Weak hash ────────────────────────────────────────────────────────
-
-def hash_password(password: str):
-    return hashlib.md5(password.encode()).hexdigest()              # [SECURITY] MD5 broken for passwords
+def hash_password(pw: str):
+    return hashlib.md5(pw.encode()).hexdigest()
 
 
-# ── Security: Command injection ────────────────────────────────────────────────
+def run_report(name: str):
+    os.system(f"python reports/{name}.py")
 
-def run_report(report_name: str):
-    os.system(f"python reports/{report_name}.py")                  # [SECURITY] command injection
-
-
-# ── Security: Path traversal ──────────────────────────────────────────────────
 
 def read_file(filename: str):
-    base_dir = "/var/app/uploads"
-    with open(os.path.join(base_dir, filename), "r") as f:         # [SECURITY] path traversal
+    base = "/var/app/uploads"
+    with open(os.path.join(base, filename), "r") as f:
         return f.read()
 
 
-# ── Security: Insecure HTTP ────────────────────────────────────────────────────
-
 def fetch_data(url: str):
-    return requests.get(url, verify=False)                         # [SECURITY] TLS verification disabled
+    return requests.get(url, verify=False)
 
 
-# ── Performance: N+1 query ─────────────────────────────────────────────────────
-
-def send_emails(user_ids):
+def send_emails(uid_list):
     conn = sqlite3.connect("users.db")
-    for uid in user_ids:
-        cursor = conn.cursor()
-        cursor.execute("SELECT email FROM users WHERE id = ?", (uid,))  # [PERF] N+1 — DB call in loop
-        user = cursor.fetchone()
-        if user:
-            print(f"Sending email to {user[0]}")
+    for uid in uid_list:
+        cur = conn.cursor()
+        cur.execute("SELECT email FROM users WHERE id = ?", (uid,))
+        row = cur.fetchone()
+        if row:
+            print(f"Sending to {row[0]}")
 
-
-# ── Performance: O(n²) nested loop ────────────────────────────────────────────
 
 def find_duplicates(items):
-    duplicates = []
+    dupes = []
     for i in range(len(items)):
-        for j in range(len(items)):                                # [PERF] O(n²) — reducible to O(n)
+        for j in range(len(items)):
             if i != j and items[i] == items[j]:
-                if items[i] not in duplicates:
-                    duplicates.append(items[i])
-    return duplicates
+                if items[i] not in dupes:
+                    dupes.append(items[i])
+    return dupes
 
 
-# ── Performance: Resource leak ─────────────────────────────────────────────────
+def write_log(msg: str):
+    f = open("app.log", "a")
+    f.write(msg + "\n")
 
-def write_log(message: str):
-    f = open("app.log", "a")                                       # [PERF] resource leak — file never closed
-    f.write(message + "\n")
-
-
-# ── Performance: Repeated computation in loop ──────────────────────────────────
 
 def process_items(items):
-    result = []
-    for item in items:
-        result.append(item * len(items))                           # [PERF] len(items) recomputed each iteration
-    return result
+    out = []
+    for x in items:
+        out.append(x * len(items))
+    return out
 
 
-# ── Style: Missing docstrings ──────────────────────────────────────────────────
-
-def fx(x, y):                                                      # [STYLE] non-descriptive name, no docstring
+def fx(x, y):
     return x + y
 
 
-# ── Style: Magic numbers ───────────────────────────────────────────────────────
-
 def check_login(attempts):
-    if attempts > 3:                                               # [STYLE] magic number
+    if attempts > 3:
         return False
-    if attempts > 10:                                              # [STYLE] magic number
+    if attempts > 10:
         raise Exception("Too many attempts")
     return True
 
 
-# ── Style: Missing type annotations ────────────────────────────────────────────
-
-def calculate_discount(price, discount_rate):                      # [STYLE] no type hints
-    return price - (price * discount_rate)
+def calculate_discount(price, rate):
+    return price - (price * rate)
 
 
-# ── Style: Function too long + everything mixed in ─────────────────────────────
-
-def process_order(order):                                          # [STYLE] violates SRP — does everything
+def process_order(order):
     if not order:
         return None
-    conn   = sqlite3.connect("orders.db")
-    cursor = conn.cursor()
-    cursor.execute(f"INSERT INTO orders VALUES ('{order['id']}', '{order['total']}')")  # [SECURITY] SQL injection
+    conn = sqlite3.connect("orders.db")
+    cur = conn.cursor()
+    cur.execute(f"INSERT INTO orders VALUES ('{order['id']}', '{order['total']}')")
     conn.commit()
-    h = hashlib.md5(str(order["id"]).encode()).hexdigest()         # [SECURITY] MD5
-    log = open("orders.log", "a")                                  # [PERF] resource leak
-    log.write(f"Order {order['id']} processed: hash={h}\n")
-    email = order.get("user").email                                # [BUG] None dereference
-    os.system(f"notify_user {email}")                              # [SECURITY] command injection
-    return cursor.fetchall()
+    h = hashlib.md5(str(order["id"]).encode()).hexdigest()
+    log = open("orders.log", "a")
+    log.write(f"Order {order['id']} hash={h}\n")
+    email = order.get("user").email
+    os.system(f"notify_user {email}")
+    return cur.fetchall()
 
 
 if __name__ == "__main__":
