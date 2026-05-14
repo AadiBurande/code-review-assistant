@@ -1,6 +1,8 @@
+# CodeScan – AI-Powered Multi-Agent Code Review Platform
+
 <div align="center">
 
-```
+```text
  ██████╗ ██████╗ ██████╗ ███████╗███████╗ ██████╗ █████╗ ███╗   ██╗
 ██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔════╝██╔════╝██╔══██╗████╗  ██║
 ██║     ██║   ██║██║  ██║█████╗  ███████╗██║     ███████║██╔██╗ ██║
@@ -11,220 +13,221 @@
 
 ### Drop your code. Get a verdict. Ship with confidence.
 
-<br>
-
-[![Python](https://img.shields.io/badge/Python-3.10+-3B82F6?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-00BFA5?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-16+-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
-[![LangChain](https://img.shields.io/badge/LangChain-Multi--Agent-7C3AED?style=for-the-badge&logo=chainlink&logoColor=white)](https://python.langchain.com)
-[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-FF6B35?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.ai)
-[![License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)](LICENSE)
-
-<br>
-
-**4 AI agents &nbsp;·&nbsp; 1 quality score &nbsp;·&nbsp; zero excuses for shipping broken code**
-
-<br>
+![Python](https://img.shields.io/badge/Python-3.10+-3B82F6?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-00BFA5?style=for-the-badge&logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16+-000000?style=for-the-badge&logo=next.js&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-Multi--Agent-7C3AED?style=for-the-badge&logo=chainlink&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-FF6B35?style=for-the-badge&logo=ollama&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)
 
 </div>
 
 ---
 
-## 🧠 What is CodeScan?
+# 📌 Overview
 
-**CodeScan** is a full-stack, AI-powered code review platform that runs your source code through a **parallel multi-agent pipeline** — simultaneously hunting bugs, security holes, performance bottlenecks, and style violations — all in **under 60 seconds**.
+**CodeScan** is a full-stack AI-powered code review platform designed to analyze source code using a **parallel multi-agent architecture**.
 
-You get a **quality score out of 100**, a clear `ACCEPT / REVIEW / REJECT` verdict, line-level findings with actionable fixes, and downloadable reports in JSON, Markdown, PDF, and SARIF.
+The platform simultaneously checks for:
 
-> No meetings. No waiting. Just answers.
+- 🐛 Bugs & logical issues  
+- 🔒 Security vulnerabilities  
+- ⚡ Performance bottlenecks  
+- 🎨 Code style & maintainability issues  
 
-<br>
+Within seconds, CodeScan generates:
 
-<div align="center">
+- ✅ A quality score out of 100  
+- ✅ ACCEPT / REVIEW / REJECT verdict  
+- ✅ Line-level findings with fixes  
+- ✅ Reports in JSON, Markdown, PDF, and SARIF formats  
 
-|  | Feature | Details |
-|--|---------|---------|
-| ⚡ | **Parallel execution** | All 4 agents run simultaneously via `ThreadPoolExecutor` |
-| 📊 | **Quality score** | Weighted 0–100 with per-agent sub-scores |
-| 🧹 | **Smart deduplication** | Cross-agent merge — no duplicate noise |
-| 📄 | **Multi-format reports** | JSON · Markdown · PDF · SARIF |
-| 🌐 | **Real-time dashboard** | Pipeline tracker · findings panel · file risk heatmap |
-| 🔌 | **Pluggable LLMs** | Ollama · Gemini · Groq · OpenAI — one-line swap |
-| 🚫 | **AI/Plagiarism detection** | Heuristic + LLM scoring, configurable threshold |
-
-</div>
+The system combines **LLM-based reasoning** with **traditional static analysis tools** to provide faster and smarter code reviews.
 
 ---
 
-## ⚡ The Pipeline
+# 🚀 Key Features
 
-```
+| Feature | Description |
+|---|---|
+| ⚡ Parallel Multi-Agent Execution | All AI agents run simultaneously using `ThreadPoolExecutor` |
+| 📊 Quality Scoring | Generates weighted score from 0–100 |
+| 🧹 Smart Deduplication | Removes duplicate findings across agents |
+| 📄 Multi-Format Reports | JSON, Markdown, PDF, and SARIF |
+| 🌐 Real-Time Dashboard | Live tracking of pipeline execution |
+| 🔌 Multiple LLM Providers | Supports Ollama, Gemini, Groq, and OpenAI |
+| 🚫 AI/Plagiarism Detection | Detects AI-generated or plagiarized code |
+| 📈 File Risk Heatmap | Visualizes risky files and modules |
+
+---
+
+# 🧠 System Architecture
+
+```text
                         ┌─────────────────────┐
            YOUR CODE ──▶│   CodeScan Engine   │
                         └─────────┬───────────┘
                                   │
               ┌───────────────────┼───────────────────┐
               ▼                   ▼                   ▼
+
        ┌─────────────┐   ┌─────────────────┐   ┌──────────────────┐
-       │ 🐛 Bug Agent │   │ 🔒 Security Agent│   │  ⚡ Perf Agent   │
-       │             │   │                 │   │                  │
-       │ Logic errors│   │ OWASP Top 10    │   │ O(n²) loops      │
-       │ Null deref  │   │ Injections      │   │ Memory leaks     │
-       │ Off-by-one  │   │ Hardcoded keys  │   │ Blocking I/O     │
-       └──────┬──────┘   └────────┬────────┘   └───────┬──────────┘
-              └──────────────┬────┘                    │
-                             │           ┌─────────────┘
-                             ▼           ▼
-                      ┌────────────────────┐
-                      │   🎨 Style Agent   │
-                      │                   │
-                      │ PEP 8 · naming    │
-                      │ Dead code · docs  │
-                      └────────┬──────────┘
+       │ 🐛 Bug Agent │   │ 🔒 Security Agent│   │ ⚡ Performance Agent │
+       └──────┬──────┘   └────────┬────────┘   └──────────┬─────────┘
+              │                   │                        │
+              └──────────────┬────┴──────────────┬────────┘
+                             ▼                   ▼
+
+                    ┌──────────────────────┐
+                    │ 🎨 Style Agent        │
+                    └──────────┬───────────┘
                                │
-                ┌──────────────▼──────────────┐
-                │    Aggregator + Dedup        │  ← no duplicate noise
-                └──────────────┬──────────────┘
+
+                    ┌──────────▼───────────┐
+                    │ Aggregator + Dedup   │
+                    └──────────┬───────────┘
                                │
-                ┌──────────────▼──────────────┐
-                │   Score · Verdict           │
-                │   Findings · Reports        │
-                └─────────────────────────────┘
+
+                    ┌──────────▼───────────┐
+                    │ Score + Final Verdict │
+                    └──────────────────────┘
 ```
 
-All 4 agents run **in parallel** — because waiting is for CI pipelines that don't respect your time.
+---
+
+# 🎯 What CodeScan Detects
+
+## 🐛 Bug Detection
+
+- Logic errors  
+- Null reference issues  
+- Unhandled exceptions  
+- Off-by-one errors  
+- Type mismatches  
 
 ---
 
-## 🎯 What Gets Caught
+## 🔒 Security Analysis
 
-<details>
-<summary><b>🐛 Bug Detection</b> — click to expand</summary>
-<br>
-
-| Finding | Description |
-|---------|-------------|
-| Logic errors | Incorrect conditions, flipped comparisons, unreachable branches |
-| Null dereferences | Unsafe access on potentially `None` values |
-| Unhandled exceptions | Missing `try/except` on risky operations |
-| Off-by-one | Fence-post errors in loops and slice indexing |
-| Type mismatches | Operations on incompatible types |
-
-</details>
-
-<details>
-<summary><b>🔒 Security Audit</b> — click to expand</summary>
-<br>
-
-| Finding | Description |
-|---------|-------------|
-| OWASP Top 10 | Full coverage of the industry-standard vulnerability list |
-| SQL / command injection | String-concatenated queries and unsafe shell calls |
-| Weak cryptography | MD5, SHA-1, ECB mode, hardcoded IVs |
-| Hardcoded secrets | API keys, passwords, tokens baked into source code |
-| CVEs | Known vulnerable dependency versions |
-
-</details>
-
-<details>
-<summary><b>⚡ Performance</b> — click to expand</summary>
-<br>
-
-| Finding | Description |
-|---------|-------------|
-| O(n²) loops | Nested iterations that could use a set or dict |
-| Memory leaks | Objects never released, ever-growing caches |
-| Blocking I/O | Synchronous calls inside async contexts |
-| N+1 DB queries | Queries inside loops — use batch fetch |
-| Unnecessary allocations | Repeated object creation in hot paths |
-
-</details>
-
-<details>
-<summary><b>🎨 Style & Quality</b> — click to expand</summary>
-<br>
-
-| Finding | Description |
-|---------|-------------|
-| PEP 8 | Spacing, line length, import ordering |
-| Naming conventions | `snake_case`, `SCREAMING_SNAKE`, `PascalCase` violations |
-| Dead code | Unused variables, functions, and imports |
-| Missing docs | Public functions/classes with no docstring |
-| Cyclomatic complexity | Functions too complex to reason about |
-
-</details>
+- OWASP Top 10 vulnerabilities  
+- SQL Injection  
+- Command Injection  
+- Hardcoded secrets  
+- Weak cryptography  
+- Vulnerable dependencies (CVEs)  
 
 ---
 
-## 🛠️ Tech Stack
+## ⚡ Performance Analysis
 
-<details open>
-<summary><b>⚙️ Backend</b></summary>
-<br>
-
-| Tool | Role |
-|------|------|
-| **FastAPI** | REST API + SSE streaming |
-| **LangChain** | LLM abstraction layer |
-| **ThreadPoolExecutor** | Parallel agent execution |
-| **Pydantic** | Finding schema validation |
-| **pylint / flake8** | Style static analysis |
-| **bandit** | Security static scan |
-| **radon** | Cyclomatic complexity |
-| **semgrep** | Pattern-based vulnerability detection |
-| **ReportLab** | PDF report generation |
-
-</details>
-
-<details open>
-<summary><b>◈ Frontend</b></summary>
-<br>
-
-| Tool | Role |
-|------|------|
-| **Next.js 16** | App Router, SSR |
-| **TypeScript** | End-to-end type safety |
-| **Tailwind CSS** | Dark-first UI system |
-| **SSE Hook** | Real-time pipeline tracking |
-
-</details>
-
-<details open>
-<summary><b>🤖 LLM Providers</b></summary>
-<br>
-
-| Provider | Type | Notes |
-|----------|------|-------|
-| 🟢 **Ollama** | Local · free · private | **Recommended** |
-| 🔵 **Google Gemini** | Cloud API | Fast, capable |
-| 🟠 **Groq** | Cloud API | Ultra-fast inference |
-| ⚪ **OpenAI** | Cloud API | GPT-4 series |
-
-</details>
+- O(n²) nested loops  
+- Memory leaks  
+- Blocking I/O calls  
+- N+1 database queries  
+- Unnecessary object allocations  
 
 ---
 
-## 🚀 Getting Started
+## 🎨 Style & Maintainability
 
-### Prerequisites
+- PEP 8 violations  
+- Naming convention issues  
+- Dead code detection  
+- Missing documentation  
+- Cyclomatic complexity analysis  
+
+---
+
+# 🛠️ Tech Stack
+
+## Backend
+
+| Technology | Purpose |
+|---|---|
+| FastAPI | REST API & SSE Streaming |
+| LangChain | LLM orchestration |
+| ThreadPoolExecutor | Parallel execution |
+| Pydantic | Schema validation |
+| Bandit | Security scanning |
+| Semgrep | Pattern-based vulnerability detection |
+| Radon | Complexity analysis |
+| Pylint / Flake8 | Style analysis |
+| ReportLab | PDF report generation |
+
+---
+
+## Frontend
+
+| Technology | Purpose |
+|---|---|
+| Next.js 16 | Frontend framework |
+| TypeScript | Type safety |
+| Tailwind CSS | UI styling |
+| SSE Hooks | Real-time status updates |
+
+---
+
+## Supported LLM Providers
+
+| Provider | Type |
+|---|---|
+| Ollama | Local |
+| Google Gemini | Cloud |
+| Groq | Cloud |
+| OpenAI | Cloud |
+
+---
+
+# 📂 Project Structure
+
+```text
+code-review-assistant/
+│
+├── backend/
+│   ├── main.py
+│   ├── agents.py
+│   ├── langgraph_pipeline.py
+│   ├── aggregator.py
+│   ├── analyzers.py
+│   ├── validators.py
+│   ├── prompts.py
+│   ├── pdf_generator.py
+│   └── tests/
+│
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   └── lib/
+│
+├── temp_uploads/
+└── reports/
+```
+
+---
+
+# ⚙️ Installation & Setup
+
+## Prerequisites
 
 | Requirement | Version |
-|-------------|---------|
-| 🐍 Python | 3.10+ |
-| 📦 Node.js | 18+ |
-| 📜 Poetry | latest — [install here](https://python-poetry.org/docs/#installation) |
-| 🤖 LLM backend | [Ollama](https://ollama.ai) *(free, local)* or an API key |
+|---|---|
+| Python | 3.10+ |
+| Node.js | 18+ |
+| Poetry | Latest |
+| LLM Backend | Ollama or API Key |
 
 ---
 
-### Step 1 — Clone
+## 1️⃣ Clone Repository
 
 ```bash
 git clone https://github.com/AadiBurande/code-review-assistant.git
 cd code-review-assistant
 ```
 
-### Step 2 — Backend setup
+---
+
+## 2️⃣ Backend Setup
 
 ```bash
 cd backend
@@ -232,239 +235,170 @@ poetry install
 cp .env.example .env
 ```
 
-Open `.env` and pick your LLM provider:
+Configure `.env`:
 
 ```env
-# ── Pick ONE ──────────────────────────────────────────
-LLM_PROVIDER=ollama          # free · runs locally · recommended
+LLM_PROVIDER=ollama
 OLLAMA_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
-
-# LLM_PROVIDER=gemini
-# GEMINI_API_KEY=your_key_here
-
-# LLM_PROVIDER=groq
-# GROQ_API_KEY=your_key_here
-
-# LLM_PROVIDER=openai
-# OPENAI_API_KEY=your_key_here
-# ──────────────────────────────────────────────────────
 ```
 
-### Step 3 — Frontend setup
+Alternative providers:
+
+```env
+# GEMINI_API_KEY=your_key
+# GROQ_API_KEY=your_key
+# OPENAI_API_KEY=your_key
+```
+
+---
+
+## 3️⃣ Frontend Setup
 
 ```bash
 cd ../frontend
 npm install
 ```
 
-### Step 4 — Launch
+---
+
+## 4️⃣ Run the Application
+
+### Backend
 
 ```bash
-# Terminal 1 — API server
 cd backend
 poetry run uvicorn main:app --reload --port 8000 --reload-exclude "temp_uploads"
+```
 
-# Terminal 2 — Web dashboard
+### Frontend
+
+```bash
 cd frontend
 npm run dev
 ```
 
-🎉 Open **[http://localhost:3000](http://localhost:3000)**
+Open:
 
-> **⚠️ Dev tip:** Always use `--reload-exclude "temp_uploads"`.
-> Without it, Uvicorn's file watcher sees uploaded files being written mid-analysis and **restarts the server**, killing the pipeline.
+```text
+http://localhost:3000
+```
 
 ---
 
-## 📡 API Reference
+# 📡 API Reference
 
-<details>
-<summary><b>POST /analyze — Submit a file for full multi-agent review</b></summary>
-<br>
+## POST `/analyze`
 
-**Request**
+Analyze uploaded source code.
 
-| Field | Type | Required | Description |
-|-------|------|:--------:|-------------|
-| `file` | `File` | ✅ | Source file or `.zip` project |
-| `language` | `string` | ✅ | `python` · `javascript` · `java` |
-| `project_name` | `string` | ❌ | Label for the report *(default: `unnamed_project`)* |
+### Request Fields
 
-**Response**
+| Field | Type | Required |
+|---|---|---|
+| file | File | ✅ |
+| language | String | ✅ |
+| project_name | String | ❌ |
 
-```jsonc
+---
+
+### Sample Response
+
+```json
 {
   "job_id": "abc123",
   "score": 13.5,
-  "verdict": "REJECT",              // "ACCEPT" | "REVIEW" | "REJECT"
+  "verdict": "REJECT",
   "project": "my_service",
   "language": "python",
-  "findings": [
-    {
-      "agent": "security",
-      "severity": "HIGH",           // "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
-      "file": "app/auth.py",
-      "line": 42,
-      "message": "Hardcoded API key detected in variable `secret`",
-      "suggestion": "Use os.environ or a secrets manager instead."
-    }
-  ],
+  "findings": [],
   "summary": {
-    "total": 38,
     "bugs": 13,
     "security": 12,
     "performance": 5,
     "style": 11
-  },
-  "reports": {
-    "markdown_url": "/reports/abc123.md",
-    "pdf_url":      "/reports/abc123.pdf",
-    "sarif_url":    "/reports/abc123.sarif",
-    "json_url":     "/reports/abc123.json"
   }
 }
 ```
 
-</details>
+---
 
-<details>
-<summary><b>GET /status/{job_id} — Real-time pipeline status</b></summary>
-<br>
+## GET `/status/{job_id}`
 
-```jsonc
+Fetch real-time pipeline status.
+
+```json
 {
-  "job_id": "abc123",
-  "status": "running",             // "queued" | "running" | "complete" | "failed"
+  "status": "running",
   "stage": "security_agent",
-  "progress": 60,                  // 0–100
-  "message": "Running security audit...",
-  "eta_seconds": 12
+  "progress": 60
 }
 ```
 
-</details>
-
 ---
 
-## 📁 Project Structure
+# 📊 Sample Output
 
-```
-code-review-assistant/
-│
-├── backend/
-│   ├── main.py                    ← FastAPI app + all endpoints
-│   ├── agents.py                  ← Bug / Security / Perf / Style agents
-│   ├── langgraph_pipeline.py      ← Pipeline orchestration
-│   ├── aggregator.py              ← Finding dedup + weighted scoring
-│   ├── analyzers.py               ← Static analysis runners
-│   ├── validators.py              ← Finding validation + noise filter
-│   ├── prompts.py                 ← All agent system prompts
-│   ├── pdf_generator.py           ← PDF report (ReportLab)
-│   ├── .env.example               ← Environment variable template
-│   └── tests/                    ← Integration + accuracy tests
-│
-├── frontend/
-│   ├── app/
-│   │   ├── page.tsx               ← Upload landing page
-│   │   ├── dashboard/[jobId]/     ← Real-time pipeline tracker
-│   │   └── api/backend/           ← Next.js → FastAPI proxy
-│   ├── components/
-│   │   ├── upload/DropZone.tsx
-│   │   ├── pipeline/PipelineTracker.tsx
-│   │   ├── score/ScoreGauge.tsx
-│   │   ├── findings/FindingsPanel.tsx
-│   │   └── heatmap/FileHeatmap.tsx
-│   └── lib/
-│       ├── api.ts                 ← Typed API client
-│       └── useAnalysisStatus.ts   ← SSE pipeline hook
-│
-├── temp_uploads/                  ← Auto-created · gitignored
-└── reports/                       ← Auto-created · gitignored
+```text
+╔══════════════════════════════════════════════════════╗
+║             CODESCAN ANALYSIS COMPLETE              ║
+╠══════════════════════════════════════════════════════╣
+║ Project   : my_service                              ║
+║ Language  : Python                                  ║
+║ Score     : 13.5 / 100   ❌ REJECT                  ║
+╠══════════════════════════════════════════════════════╣
+║ 🐛 Bugs           : 13                              ║
+║ 🔒 Security       : 12                              ║
+║ ⚡ Performance    : 5                               ║
+║ 🎨 Style          : 11                              ║
+╚══════════════════════════════════════════════════════╝
 ```
 
 ---
 
-## 📊 Sample Verdict
+# ⚙️ Environment Variables
 
-```
-╔══════════════════════════════════════════════════════════╗
-║             CODESCAN  —  ANALYSIS COMPLETE               ║
-╠══════════════════════════════════════════════════════════╣
-║  Project   :  my_service                                 ║
-║  Language  :  Python                                     ║
-║  Score     :  13.5 / 100               ❌  REJECT        ║
-╠══════════════════════════════════════════════════════════╣
-║  🐛  Bugs              13                                ║
-║  🔒  Security          12                                ║
-║  ⚡  Performance        5                                ║
-║  🎨  Style             11                                ║
-║  ─────────────────────────────────────────               ║
-║  Total findings (deduped)   38                           ║
-╚══════════════════════════════════════════════════════════╝
-
-  TOP CRITICAL FINDINGS
-  ────────────────────────────────────────────────────────
-  [CRITICAL]  Line  42   Hardcoded API key in variable `secret`
-  [HIGH]      Line  87   Unhandled IndexError — list may be empty
-  [HIGH]      Line 103   SQL query via string concat → injection risk
-  [MEDIUM]    Line  56   N+1 query inside loop — use batch fetch
-  [MEDIUM]    Line  99   O(n²) nested loop — replace with set lookup
-```
+| Variable | Description |
+|---|---|
+| LLM_PROVIDER | Selected LLM provider |
+| OLLAMA_MODEL | Ollama model name |
+| GEMINI_API_KEY | Gemini API key |
+| GROQ_API_KEY | Groq API key |
+| OPENAI_API_KEY | OpenAI API key |
+| MAX_FILE_SIZE_MB | Upload size limit |
+| PLAGIARISM_THRESHOLD | AI detection threshold |
+| TEMP_UPLOAD_DIR | Temporary upload folder |
+| REPORTS_DIR | Generated reports folder |
 
 ---
 
-## ⚙️ Configuration Reference
+# 🤝 Contributing
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_PROVIDER` | `ollama` | `ollama` · `gemini` · `groq` · `openai` |
-| `OLLAMA_MODEL` | `qwen2.5-coder:7b-instruct-q4_K_M` | Model name for Ollama |
-| `GEMINI_API_KEY` | — | Google Gemini API key |
-| `GROQ_API_KEY` | — | Groq Cloud API key |
-| `OPENAI_API_KEY` | — | OpenAI API key |
-| `MAX_FILE_SIZE_MB` | `10` | Upload size limit |
-| `PLAGIARISM_THRESHOLD` | `65` | Score above which submission is blocked |
-| `TEMP_UPLOAD_DIR` | `temp_uploads` | Staging directory for uploads |
-| `REPORTS_DIR` | `reports` | Output directory for generated reports |
-
----
-
-## 🤝 Contributing
-
-Bug reports, new agent ideas, and language support PRs are all welcome.
+Contributions are welcome.
 
 ```bash
-# 1. Fork and clone your fork
+# Create feature branch
+git checkout -b feature-name
 
-# 2. Create a feature branch
-git checkout -b feat/add-rust-support
-
-# 3. Make your changes + add tests
-
-# 4. Push and open a PR
-git push origin feat/add-rust-support
+# Push changes
+git push origin feature-name
 ```
 
-> Please open an **Issue** first for significant changes so we can align before you invest time building.
+Please open an issue before making major changes.
 
 ---
 
-## 📄 License
+# 📄 License
 
-MIT © [Aadi Burande](https://github.com/AadiBurande) · [Yash Tayade](https://github.com/YashTayade)
+MIT License
+
+© Aadi Burande, Yash Tayade & Rutuja Deshmukh
 
 ---
 
 <div align="center">
 
-<br>
+### CodeScan — Because Code Review Shouldn't Require a Meeting
 
-```
-[ CODESCAN ] — because code review shouldn't require a meeting
-```
-
-*Built with ⚡ FastAPI · ▲ Next.js · 🔗 LangChain · 🟢 Ollama*
-
-<br>
+Built with ❤️ using FastAPI, Next.js, LangChain, and Ollama.
 
 </div>
